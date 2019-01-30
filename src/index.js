@@ -7,10 +7,6 @@ const {
   log
 } = require('cozy-konnector-libs')
 const request = requestFactory({
-  // the debug mode shows all the details about http request and responses. Very useful for
-  // debugging but very verbose. That is why it is commented out by default
-  // debug: true,
-  // activates [cheerio](https://cheerio.js.org/) parsing on each page
   cheerio: true,
   // If cheerio is activated do not forget to deactivate json parsing (which is activated by
   // default in cozy-konnector-libs
@@ -23,65 +19,82 @@ const baseUrl = 'https://wwwd.caf.fr'
 
 module.exports = new BaseKonnector(start)
 
-// The start function is run by the BaseKonnector instance only when it got all the account
-// information (fields). When you run this connector yourself in "standalone" mode or "dev" mode,
-// the account information come from ./konnector-dev-config.json file
 async function start(fields) {
   log('info', 'Authenticating ...')
-  await authenticate(fields.login, fields.password)
+  await authenticate(fields.num, fields.zipcode, fields.born, fields.password)
   log('info', 'Successfully logged in')
-/*   // The BaseKonnector instance expects a Promise as return of the function
-  log('info', 'Fetching the list of documents')
-  const $ = await request(`${baseUrl}/index.html`)
-  // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
-  log('info', 'Parsing list of documents')
-  const documents = await parseDocuments($)
-
-  // here we use the saveBills function even if what we fetch are not bills, but this is the most
-  // common case in connectors
-  log('info', 'Saving data to Cozy')
-  await saveBills(documents, fields, {
-    // this is a bank identifier which will be used to link bills to bank operations. These
-    // identifiers should be at least a word found in the title of a bank operation related to this
-    // bill. It is not case sensitive.
-    identifiers: ['books']
-  }) */
+  /*   // The BaseKonnector instance expects a Promise as return of the function
+    log('info', 'Fetching the list of documents')
+    const $ = await request(`${baseUrl}/index.html`)
+    // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
+    log('info', 'Parsing list of documents')
+    const documents = await parseDocuments($)
+  
+    // here we use the saveBills function even if what we fetch are not bills, but this is the most
+    // common case in connectors
+    log('info', 'Saving data to Cozy')
+    await saveBills(documents, fields, {
+      // this is a bank identifier which will be used to link bills to bank operations. These
+      // identifiers should be at least a word found in the title of a bank operation related to this
+      // bill. It is not case sensitive.
+      identifiers: ['books']
+    }) */
 }
 
-// this shows authentication using the [signin function](https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#module_signin)
-// even if this in another domain here, but it works as an example
-function authenticate(username, password) {
-  return signin({
-    url: `${baseUrl}/wps/portal/caffr/login/!ut/p/a1/04_Sj9CPykssy0xPLMnMz0vMAfGjzOID_A3dPbyDDdz9A1yNDTxdzQNDXJ19DS0CjYAKIoEKDHAARwNC-sP1o8BK8JjgpR-VnpOfBHZNpGNekrFFun5UUWpaalFqkV5pEVA4o6SkwErVQNWgvLxcLzkxTS-tSNUAm-qM_OIS_QiEKv2C3AgD3aikynJHRUUAO_ejAA!!/dl5/d5/L2dBISEvZ0FBIS9nQSEh/#/signature`,
-    formSelector: 'form',
-    formData: { username, password },
-    // the validate function will check if the login request was a success. Every website has
-    // different ways respond: http status code, error message in html ($), http redirection
-    // (fullResponse.request.uri.href)...
-    validate: (statusCode, $, fullResponse) => {
-      log(
-        'debug',
-        fullResponse.request.uri.href,
-        'not used here but should be usefull for other connectors'
-      )
-      // The login in toscrape.com always works excepted when no password is set
-      if ($(`a[href='/logout']`).length === 1) {
-        return true
-      } else {
-        // cozy-konnector-libs has its own logging function which format these logs with colors in
-        // standalone and dev mode and as JSON in production mode
-        log('error', $('.error').text())
-        return false
-      }
-    }
+async function authenticate(num, zipcode, born, password) {
+
+  //TODO: Il y a surement d'autres requetes à faire avant pour récupérer certains cookies ou autres nécessaires pour les requetes suivantes
+
+  // Par exemple : soit cette requete est inutile, soit elle permet de récupérer des cookies ou autres nécessaires aux requetes ci-dessous
+  /* const post = await request({
+     url: `${baseUrl}/api/loginfront/v1/mon_compte/identifier`,
+     method: 'post',
+     headers: {*/
+  // 'Accept': 'application/json, text/plain, */*',
+  /* 'Accept-Language': 'en-US,en;q=0.9',
+   'Content-Type': 'application/json;charset=UTF-8',
+   'Host': 'wwwd.caf.fr',
+   'Origin': 'https://wwwd.caf.fr',
+   'Referer': 'https://wwwd.caf.fr/wps/portal/caffr/login/!ut/p/a1/<refererToken>/', //TODO: Récupérer le referer token
+   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
+   'Connection': 'keep-alive',
+   'Cache-Control': 'no-cache',
+   'Cookie': '', //TODO: On a peut-etre besoin de cookies
+   'Authorization': token,
+ },
+ form: {
+   codeOrga: '351', //TODO: à recupérer en Json avant grace un GET https://wwwd.caf.fr/api/loginfront/v1/mon_compte/communes/${zipcode}
+   numeroAllocataire: num,
+   codePostal: zipcode,
+   jourMoisNaissance: born
+ }
+}, (error, response, body) => {
+})*/
+
+  //TODO:  On doit récupérer un referer token à partir de response.headers['location'] de la réponse de cette requete :
+  // curl 'http://www.caf.fr/redirect/redirect.php?page=monCompte' - H 'Connection: keep-alive' - H 'Pragma: no-cache' - H 'Cache-Control: no-cache' - H 'Upgrade-Insecure-Requests: 1' - H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36' - H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8' - H 'Referer: http://www.caf.fr/' - H 'Accept-Encoding: gzip, deflate' - H 'Accept-Language: en-US,en;q=0.9' - H 'Cookie: DYN_PERSYS=1025157312.14119.0000; rxVisitor=1548839522932T4KPS2JV09NQ3EML74SE85L5AH0UGV4Q; modeAffichage=web; ace_sticky_slb=R3595672858; atuserid=%7B%22name%22%3A%22atuserid%22%2C%22val%22%3A%22c5bf00a4-604e-4ebe-a96b-300aca8237fa%22%2C%22options%22%3A%7B%22end%22%3A%222020-03-02T09%3A12%3A04.351Z%22%2C%22path%22%3A%22%2F%22%7D%7D; atidvisitor=%7B%22name%22%3A%22atidvisitor%22%2C%22val%22%3A%7B%22vrn%22%3A%22-516084-%22%7D%2C%22options%22%3A%7B%22path%22%3A%22%2F%22%2C%22session%22%3A15724800%2C%22end%22%3A15724800%7D%7D; session_caf=351; cookie-agreed=2; JSESSIONID=00006oAFbG8cOosPre9xl8ADq33:18ntpvh74; TS01dec71a=015e43680bd21b8432ad9c349cbe34e8432dfbf0ebe478226c5a97be957d2fd5a09321af6b327e511eeceb8c1fe875f450c9685216925a803472eb500eadd2db4f101b021b; has_js=1; redirect=accueilCaffr; TS01cc9cc2=015e43680b292ed974b2fba74ff775b596ebf3ad47e478226c5a97be957d2fd5a09321af6b49cae8ff5e637d4baa925417b07ce0c3907c59dd32ddddc0982dcddcdc4923f8ddfc1c4c834238ff92f54f281e30aef9a8ec560e35296a6ed42c4b827ccb79b9304a945a823253a2830e67392faaa66c; dtPC=13$242007264_138h-vHMGULPTLOGNGPPHFPMKANIDJKTNIBVVP; rxvt=1548843816075|1548839522939; dtLatC=1; dtSa=true%7CC%7C-1%7Cheader-monc-notif%20icon-pic-notification%7C-%7C1548842045829%7C242007264_138%7Chttp%3A%2F%2Fwww.caf.fr%2F%7CBienvenue%20sur%20Caf.fr%20%5Ep%20caf.fr%7C1548842016076%7C; dtCookie=13$692D3DBFD4457F2174A98B10ACDE5EED|RUM+Default+Application|1' --compressed
+
+  // TODO: On a ensuite besoin de récupérer le codeOrga en json avec la requete : 
+  // Des cookies ou autres sont peut-etre nécessaires
+  //GET https://wwwd.caf.fr/api/loginfront/v1/mon_compte/communes/${zipcode}
+
+  //TODO: Puis il faut parser le numpad, et trouver le moyen de récupérer le password parsé à passer en formData à cette requete                                                                                                                                                      
+
+  //TODO: On peut ensuite s'authentifier avec num, zipcode, born et password    
+  // curl 'https://wwwd.caf.fr/wta-portletangular-web/s/authentifier_mdp' -H 'Accept: application/json, text/plain, */*' -H 'Referer: https://wwwd.caf.fr/wps/portal/caffr/login/!ut/p/a1/<RefererToken>' -H 'Origin: https://wwwd.caf.fr' -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8;' --data 'codeOrga=<codeOrga>&jourMoisNaissance=<born>&matricule=<num>&positions=<parsedPassword>&typeCanal=1' --compressed
+
+  // Il est possible qu'il faille ensuite récupérer une authorization :
+  let token
+  await request({
+    url: 'https://wwwd.caf.fr/wps/s/GenerateTokenJwtPublic/'
+  }, (error, response, body) => {
+    token = JSON.parse(body).cnafTokenJwt
   })
+
+  //TODO: Ensuite il y a peut-etre d'autres requetes à faire pour obtenir la page
 }
 
-// The goal of this function is to parse a html page wrapped by a cheerio instance
-// and return an array of js objects which will be saved to the cozy by saveBills (https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#savebills)
 function parseDocuments($) {
-  // you can find documentation about the scrape function here :
-  // https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#scrape
   const docs = scrape(
     $,
     {
