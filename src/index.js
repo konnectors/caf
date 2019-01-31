@@ -103,12 +103,60 @@ async function authenticate(num, zipcode, born, password) {
     referer = `https://wwwd.caf.fr${r.headers['content-location']}`
   })
 
-  //TODO: Puis il faut parser le numpad, et trouver le moyen de récupérer le password parsé à passer en formData à cette requete                                                                                                                                                      
+  // Correspondances : caseCssClass / chiffre
+  const assocClassDigit = [
+    { digit: '0', class: 'case-xt' },
+    { digit: '1', class: 'case-xy' },
+    { digit: '2', class: 'case-xw' },
+    { digit: '3', class: 'case-xq' },
+    { digit: '4', class: 'case-xz' },
+    { digit: '5', class: 'case-xs' },
+    { digit: '6', class: 'case-xu' },
+    { digit: '7', class: 'case-xx' },
+    { digit: '8', class: 'case-xr' },
+    { digit: '9', class: 'case-xv' },
+  ]
 
-  //TODO: On peut ensuite s'authentifier avec num, zipcode, born et password    
-  // curl 'https://wwwd.caf.fr/wta-portletangular-web/s/authentifier_mdp' -H 'Accept: application/json, text/plain, */*' -H 'Referer: https://wwwd.caf.fr/wps/portal/caffr/login/!ut/p/a1/<RefererToken>' -H 'Origin: https://wwwd.caf.fr' -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8;' --data 'codeOrga=<codeOrga>&jourMoisNaissance=<born>&matricule=<num>&positions=<parsedPassword>&typeCanal=1' --compressed
+  // On récupère les correspondances : caseCssClass / lettre
+  let assocClassLetter
+  await request({
+    url: 'https://wwwd.caf.fr/wta-portletangular-web/s/clavier_virtuel?nbCases=15',
+    header: {
+      'Referer': referer,
+      'Cookie': 'WASReqURL=https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord; TS0163ef20=015e43680bc8504acecfb29d61fee7f355c2a72db905778274d9e81b8875c3f364ad21a17a6892ce639c937eba672bf048619b9c44d76e25dfad91f28d18811d74d1a87a141b5ff043cfbeb4f07e134d8e1649e2ff30edc1427a7208891449cddedecaf436'
+    }
+  }, (error, response, body) => {
+    assocClassLetter = JSON.parse(body).listeCase
+  })
 
-  // Il est possible qu'il faille ensuite récupérer une authorization :
+  // On parse le password pour le passer à la requete suivante     
+  const parsedPassword = parsePassword(password, assocClassLetter, assocClassDigit)
+  log('info', parsedPassword)
+
+  //On peut ensuite s'authentifier avec codeOrga, num, zipcode, born, referer et password  
+  //! La page est introuvable, il doit manquer quelquechose  
+  await request({
+    url: 'https://wwwd.caf.fr/wta-portletangular-web/s/authentifier_mdp',
+    headers: {
+      'Accept': 'application/json, text/plain, */*',
+      'Referer': referer,
+      'Origin': 'https://wwwd.caf.fr',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8;'
+    },
+    form: {
+      codeOrga: codeOrga,
+      jourMoisNaissance:born,
+      matricule:num,
+      positions:parsedPassword,
+      typeCanal: 1
+    }
+  }, (error, response, body) => {
+    log('info', response)
+    log('info', body)
+    log('info', error)
+  })
+
+  // Il est possible qu'il faille de nouveau récupérer une authorization :
   await request({
     url: 'https://wwwd.caf.fr/wps/s/GenerateTokenJwtPublic/'
   }, (error, response, body) => {
@@ -158,6 +206,31 @@ function parseDocuments($) {
       version: 1
     }
   }))
+}
+
+function parsePassword(password, assocClassLetter, assocClassDigit) {
+  var assocLetterDigit = []
+  for (var l = 0; l < assocClassLetter.length; l++) {
+    for (var d = 0; d < assocClassDigit.length; d++) {
+      if (assocClassDigit[d].class == assocClassLetter[l].classCss) {
+        assocLetterDigit.push({
+          letter: assocClassLetter[l].position,
+          digit: assocClassDigit[d].digit
+        })
+      }
+    }
+  }
+
+  let parsedPassword = ''
+  for (var c = 0; c < password.length; c++) {
+    for (var a = 0; a < assocLetterDigit.length; a++) {
+       if (password[c] == assocLetterDigit[a].digit) {
+        parsedPassword += assocLetterDigit[a].letter
+      }
+    }
+  }
+
+  return parsedPassword
 }
 
 // convert a price string to a float
