@@ -1,16 +1,22 @@
 {
   "version": "1.0.0",
-  "name": "Connector template",
+  "name": "Caf",
   "type": "konnector",
   "language": "node",
   "icon": "icon.png",
-  "slug": "template",
-  "source": "git://github.com/konnectors/cozy-konnector-template.git",
+  "slug": "caf",
+  "source": "git://github.com/konnectors/caf.git",
   "editor": "Cozy",
-  "vendor_link": "Link to the target website",
-  "categories": ["other"],
+  "vendor_link": "https://www.caf.fr/",
+  "categories": ["public_service"],
   "fields": {
-    "login": {
+    "zipcode": {
+      "type": "text"
+    },
+    "born": {
+      "type": "text"
+    },
+    "num": {
       "type": "text"
     },
     "password": {
@@ -49,8 +55,8 @@
   "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "short_description": "Template de connecteur",
-      "long_description": "Ce template récupère une liste de livres sur un site de scraping",
+      "short_description": "Récupère vos attestations",
+      "long_description": "Récupère vos attestations de paiement et de quotient familial",
       "permissions": {
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
@@ -67,8 +73,8 @@
       }
     },
     "en": {
-      "short_description": "Connector template",
-      "long_description": "This template fetches a list of books from a scraping website",
+      "short_description": "Fetch your certificates",
+      "long_description": "Fetch your payments certificates and your family allowance certificates",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
@@ -85,6 +91,6 @@
       }
     }
   },
-  "banksTransactionRegExp": "\\bbooks\\b",
+  "banksTransactionRegExp": "\\bcaf\\b",
   "manifest_version": "2"
 }
