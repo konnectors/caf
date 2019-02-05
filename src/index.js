@@ -1,7 +1,6 @@
 const {
   BaseKonnector,
   requestFactory,
-  scrape,
   saveBills,
   errors,
   log
@@ -18,23 +17,35 @@ module.exports = new BaseKonnector(start)
 
 async function start(fields) {
   log('info', 'Authenticating ...')
-  await authenticate(fields.num, fields.zipcode, fields.born, fields.password)
+  const codeOrga = await authenticate(fields.num, fields.zipcode, fields.born, fields.password)
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
-  const $ = await request('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord')
-  /*log('info', 'Parsing list of documents')
-   const documents = await parseDocuments($)
- 
-   // here we use the saveBills function even if what we fetch are not bills, but this is the most
-   // common case in connectors
-   log('info', 'Saving data to Cozy')
-   await saveBills(documents, fields, {
-     // this is a bank identifier which will be used to link bills to bank operations. These
-     // identifiers should be at least a word found in the title of a bank operation related to this
-     // bill. It is not case sensitive.
-     identifiers: ['books']
-   }) */
+  let token
+  await request({
+    url: `${baseUrl}/wps/s/GenerateTokenJwt/`
+  }, (error, response, body) => {
+    token = JSON.parse(body).cnafTokenJwt
+  })
+
+  let bills
+  await request({
+    url: `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.num}`,
+    headers: {
+      'Authorization': token
+    }
+  }, (error, response, body) => {
+    bills = JSON.parse(body).paiements
+  })
+
+  log('info', 'Parsing list of documents')
+  const documents = await parseDocuments(bills, token)
+
+  log('info', 'Saving data to Cozy')
+  await saveBills(documents, fields, {
+    identifiers: ['caf'],
+    contentType: 'application/pdf'
+  })
 }
 
 async function authenticate(num, zipcode, born, password) {
@@ -42,15 +53,20 @@ async function authenticate(num, zipcode, born, password) {
   // Ask for authorization
   let token
   await request({
-    url: 'https://wwwd.caf.fr/wps/s/GenerateTokenJwtPublic/'
+    url: `${baseUrl}/wps/s/GenerateTokenJwtPublic/`
   }, (error, response, body) => {
-    token = JSON.parse(body).cnafTokenJwt
+    try {
+      token = JSON.parse(body).cnafTokenJwt
+    }
+    catch (err) {
+      throw new Error(errors.VENDOR_DOWN)
+    }
   })
 
   // Retreive codeOrga : 
   let codeOrga
   await request({
-    url: `https://wwwd.caf.fr/api/loginfront/v1/mon_compte/communes/${zipcode}`,
+    url: `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
     headers: { 'Authorization': token }
   }, (error, response, body) => {
     if (JSON.parse(body).listeCommunes.length == 0) {
@@ -77,7 +93,7 @@ async function authenticate(num, zipcode, born, password) {
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
   await request({
-    url: 'https://wwwd.caf.fr/wta-portletangular-web/s/clavier_virtuel?nbCases=15'
+    url: `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
   }, (error, response, body) => {
     assocClassLetter = JSON.parse(body).listeCase
   })
@@ -87,7 +103,7 @@ async function authenticate(num, zipcode, born, password) {
 
   // Authentication with codeOrga, num, zipcode, born, and password  
   await request({
-    url: 'https://wwwd.caf.fr/wta-portletangular-web/s/authentifier_mdp',
+    url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
     method: 'POST',
     form: {
       codeOrga: codeOrga,
@@ -99,53 +115,64 @@ async function authenticate(num, zipcode, born, password) {
   })
 
   // Check if connected
-  await request('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord', (e, response, b) => {
-    if (response.request.uri.href != 'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord') {
+  await request(`${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord'`, (e, response, b) => {
+    if (!response.request.uri.href.includes(`${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`)) {
       throw new Error(errors.LOGIN_FAILED)
     }
   })
+
+  return codeOrga
 }
 
-function parseDocuments($) {
-  const docs = scrape(
-    $,
-    {
-      title: {
-        sel: 'h3 a',
-        attr: 'title'
-      },
-      amount: {
-        sel: '.price_color',
-        parse: normalizePrice
-      },
-      fileurl: {
-        sel: 'img',
-        attr: 'src',
-        parse: src => `${baseUrl}/${src}`
-      },
-      filename: {
-        sel: 'h3 a',
-        attr: 'title',
-        parse: title => `${title}.jpg`
+async function parseDocuments(docs, token) {
+
+  const actualLength = docs.length
+
+  for (var i = 0; i < actualLength; i++) {
+    const [year, month] = dateToYearMonth(parseDate(docs[i].dateElaboration))
+    docs[i].date = parseDate(docs[i].dateElaboration)
+    docs[i].amount = parseAmount(docs[i].montantPaiement)
+
+    // The PDF required an authorization 
+    docs[i].requestOptions = {
+      headers: {
+        'Authorization': token
       }
-    },
-    'article'
-  )
-  return docs.map(doc => ({
-    ...doc,
-    // the saveBills function needs a date field
-    // even if it is a little artificial here (these are not real bills)
-    date: new Date(),
-    currency: '€',
-    vendor: 'template',
-    metadata: {
-      // it can be interesting that we add the date of import. This is not mandatory but may be
-      // useful for debugging or data migration
-      importDate: new Date(),
-      // document version, useful for migration after change of document structure
-      version: 1
     }
-  }))
+
+    // Get las day of the month for the request
+    const lastDay = daysInMonth(docs[i].date.getMonth() + 1, docs[i].date.getFullYear())
+
+    // Create bill for : Attestation de paiement
+    docs[i] = {
+      date: docs[i].date,
+      currency: '€',
+      requestOptions: docs[i].requestOptions,
+      amount: docs[i].amount,
+      vendor: 'caf',
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${year}${month}01/${year}${month}${lastDay}`,
+      filename: `${formatDate(docs[i].date)}_caf_attestation_paiement_${docs[i].amount.toFixed(2)}€.pdf`,
+      metadata: {
+        importDate: new Date(),
+        version: 1
+      }
+    }
+
+    // Create bill for : Allocation familiale
+    docs[docs.length] = {
+      date: docs[i].date,
+      requestOptions: docs[i].requestOptions,
+      vendor: 'caf',
+      amount: 0.0,
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
+      filename: `${formatDate(docs[i].date)}_caf_attestation_quotient_familial.pdf`,
+      metadata: {
+        importDate: new Date(),
+        version: 1
+      }
+    }
+  }
+  return docs
 }
 
 function parsePassword(password, assocClassLetter, assocClassDigit) {
@@ -173,7 +200,44 @@ function parsePassword(password, assocClassLetter, assocClassDigit) {
   return parsedPassword
 }
 
-// convert a price string to a float
-function normalizePrice(price) {
-  return parseFloat(price.replace('£', '').trim())
+// Convert a Date object to a ISO date string
+function formatDate(date) {
+  let year = date.getFullYear()
+  let month = date.getMonth() + 1
+  let day = date.getDate()
+  if (month < 10) {
+    month = '0' + month
+  }
+  if (day < 10) {
+    day = '0' + day
+  }
+  return `${year}-${month}-${day}`
+}
+
+// Convert a date from format Ymmdd  to Date object
+function parseDate(text) {
+  const y = text.substr(0, 4)
+  const m = parseInt(text.substr(4, 2), 10)
+  const d = parseInt(text.substr(6, 2), 10)
+  return new Date(y, m - 1, d)
+}
+
+// Convert date object to Ymm
+function dateToYearMonth(date) {
+  let month = date.getMonth() + 1
+  if (month < 10) {
+    month = '0' + month
+  }
+  const year = date.getFullYear()
+
+  return [year, month]
+}
+
+function parseAmount(amount) {
+  return parseFloat(amount.replace(',', '.'))
+}
+
+// Return number of days in the month
+function daysInMonth(month, year) {
+  return new Date(year, month, 0).getDate();
 }
