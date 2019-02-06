@@ -39,12 +39,27 @@ async function start(fields) {
 
 async function authenticate(num, zipcode, born, password) {
 
+  if (num == "" || num == null || zipcode == "" || zipcode == null || born == "" || born == null || password == "" || password == null) {
+    log('error', 'Some fields are not defined')
+    throw new Error(errors.LOGIN_FAILED)
+  }
+
+  // Reset / Create session
+  await request('https://wwwd.caf.fr/wps/portal/caffr/login#/signature')
+
   // Ask for authorization
   let token
   await request({
     url: 'https://wwwd.caf.fr/wps/s/GenerateTokenJwtPublic/'
   }, (error, response, body) => {
-    token = JSON.parse(body).cnafTokenJwt
+    try {
+      token = JSON.parse(body).cnafTokenJwt
+    }
+    catch (err) {
+      log('error', err)
+      log('error', body)
+      throw new Error('An error occured while trying to retreive a token')
+    }
   })
 
   // Retreive codeOrga : 
@@ -53,11 +68,18 @@ async function authenticate(num, zipcode, born, password) {
     url: `https://wwwd.caf.fr/api/loginfront/v1/mon_compte/communes/${zipcode}`,
     headers: { 'Authorization': token }
   }, (error, response, body) => {
-    if (JSON.parse(body).listeCommunes.length == 0) {
-      log('error', 'Zip code is not valid or does not exist')
+    try {
+      if (JSON.parse(body).listeCommunes.length == 0) {
+        log('error', 'Zip code is not valid or does not exist')
+        log('error', body)
+        throw new Error(errors.LOGIN_FAILED)
+      }
+      codeOrga = JSON.parse(body).listeCommunes[0].codeOrga
+    }
+    catch (err) {
+      log('error', err)
       throw new Error(errors.LOGIN_FAILED)
     }
-    codeOrga = JSON.parse(body).listeCommunes[0].codeOrga
   })
 
   // Correspondences : caseCssClass / digit
@@ -79,13 +101,20 @@ async function authenticate(num, zipcode, born, password) {
   await request({
     url: 'https://wwwd.caf.fr/wta-portletangular-web/s/clavier_virtuel?nbCases=15'
   }, (error, response, body) => {
-    assocClassLetter = JSON.parse(body).listeCase
+    try {
+      assocClassLetter = JSON.parse(body).listeCase
+    }
+    catch (err) {
+      log('error', err)
+      log('error', body)
+      throw new Error(errors.VENDOR_DOWN)
+    }
   })
 
   // Parse password
   const parsedPassword = parsePassword(password, assocClassLetter, assocClassDigit)
 
-  // Authentication with codeOrga, num, zipcode, born, and password  
+  // Authentication with all fields 
   await request({
     url: 'https://wwwd.caf.fr/wta-portletangular-web/s/authentifier_mdp',
     method: 'POST',
@@ -99,8 +128,9 @@ async function authenticate(num, zipcode, born, password) {
   })
 
   // Check if connected
-  await request('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord', (e, response, b) => {
-    if (response.request.uri.href != 'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord') {
+  await request('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord', (error, response, body) => {
+    if (!response.request.uri.href.includes('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord')) {
+      log('error', 'An error occured while trying to connect with the given identifiers')
       throw new Error(errors.LOGIN_FAILED)
     }
   })
