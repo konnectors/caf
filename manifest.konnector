@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.0.0",
   "name": "Caf",
   "type": "konnector",
   "language": "node",
@@ -8,9 +8,7 @@
   "source": "git://github.com/konnectors/caf.git",
   "editor": "Cozy",
   "vendor_link": "https://www.caf.fr/",
-  "categories": [
-    "public_service"
-  ],
+  "categories": ["public_service"],
   "fields": {
     "zipcode": {
       "type": "text"
@@ -47,29 +45,16 @@
     },
     "accounts": {
       "type": "io.cozy.accounts",
-      "verbs": [
-        "GET"
-      ]
+      "verbs": ["GET"]
     }
   },
   "developer": {
     "name": "Cozy Cloud",
     "url": "https://cozy.io"
   },
-  "langs": [
-    "fr",
-    "en"
-  ],
+  "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "fields": {
-        "zipcode": {
-          "label": "Code postal"
-        },
-        "num": {
-          "label": "Numéro d'allocataire"
-        }
-      },
       "short_description": "Récupère vos documents de la CAF",
       "long_description": "Récupère sur le site de la CAF:\n- Les attestations de de paiement ;\n- Les attestations de quotient familial",
       "permissions": {
