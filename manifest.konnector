@@ -74,7 +74,7 @@
     },
     "en": {
       "short_description": "Fetch your documents from the CAF website",
-      "long_description": "Fetch on the CAF website:\n- Payment certificates ;\n- Certificates of "quotient familial",
+      "long_description": "Fetch on the CAF website:\n- Payment certificates ;\n- Certificates of quotient familial",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"

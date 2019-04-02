@@ -7,7 +7,7 @@ const {
   log
 } = require('cozy-konnector-libs')
 const request = requestFactory({
-  debug: true,
+  //debug: true,
   cheerio: true,
   json: false,
   jar: true
@@ -66,6 +66,7 @@ async function start(fields) {
     identifiers: ['caf'],
     contentType: 'application/pdf'
   })
+  // Only one attestation send, replaced each time
   await saveFiles(files, fields)
 }
 
@@ -242,6 +243,7 @@ async function parseAttestation(token) {
   // A array with one element
   return [
     {
+      shouldReplaceFile: () => true,
       requestOptions: {
         // The PDF required an authorization
         headers: {
