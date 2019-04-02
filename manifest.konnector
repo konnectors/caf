@@ -55,8 +55,8 @@
   "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "short_description": "Récupère vos attestations",
-      "long_description": "Récupère vos attestations de paiement et de quotient familial",
+      "short_description": "Récupère vos documents de la CAF",
+      "long_description": "Récupère sur le site de la CAF:\n- Les attestations de de paiement ;\n- Les attestations de quotient familial",
       "permissions": {
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
@@ -73,8 +73,8 @@
       }
     },
     "en": {
-      "short_description": "Fetch your certificates",
-      "long_description": "Fetch your payments certificates and your family allowance certificates",
+      "short_description": "Fetch your documents from the CAF website",
+      "long_description": "Fetch on the CAF website:\n- Payment certificates ;\n- Certificates of "quotient familial",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
