@@ -2,55 +2,84 @@ const {
   BaseKonnector,
   requestFactory,
   saveBills,
+  saveFiles,
   errors,
   log
 } = require('cozy-konnector-libs')
 const request = requestFactory({
+  debug: true,
   cheerio: true,
   json: false,
   jar: true
 })
 
 const baseUrl = 'https://wwwd.caf.fr'
+const lastDayOfMonth = require('date-fns').lastDayOfMonth
+const subMonths = require('date-fns').subMonths
 
 module.exports = new BaseKonnector(start)
 
 async function start(fields) {
   log('info', 'Authenticating ...')
-  const codeOrga = await authenticate(fields.num, fields.zipcode, fields.born, fields.password)
+  const codeOrga = await authenticate(
+    fields.num,
+    fields.zipcode,
+    fields.born,
+    fields.password
+  )
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
   let token
-  await request({
-    url: `${baseUrl}/wps/s/GenerateTokenJwt/`
-  }, (error, response, body) => {
-    token = JSON.parse(body).cnafTokenJwt
-  })
-
-  let bills
-  await request({
-    url: `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.num}`,
-    headers: {
-      'Authorization': token
+  await request(
+    {
+      url: `${baseUrl}/wps/s/GenerateTokenJwt/`
+    },
+    (error, response, body) => {
+      token = JSON.parse(body).cnafTokenJwt
     }
-  }, (error, response, body) => {
-    bills = JSON.parse(body).paiements
-  })
+  )
 
-  log('info', 'Parsing list of documents')
-  const documents = await parseDocuments(bills, token)
+  let paiements
+  await request(
+    {
+      url: `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
+        fields.num
+      }`,
+      headers: {
+        Authorization: token
+      }
+    },
+    (error, response, body) => {
+      paiements = JSON.parse(body).paiements
+    }
+  )
+
+  log('info', 'Parsing bills')
+  const bills = await parseDocuments(paiements, token)
+
+  log('info', 'Parsing attestation')
+  const files = await parseAttestation(token)
 
   log('info', 'Saving data to Cozy')
-  await saveBills(documents, fields, {
+  await saveBills(bills, fields, {
     identifiers: ['caf'],
     contentType: 'application/pdf'
   })
+  await saveFiles(files, fields)
 }
 
 async function authenticate(num, zipcode, born, password) {
-
-  if (num == "" || num == null || zipcode == "" || zipcode == null || born == "" || born == null || password == "" || password == null) {
+  if (
+    num == '' ||
+    num == null ||
+    zipcode == '' ||
+    zipcode == null ||
+    born == '' ||
+    born == null ||
+    password == '' ||
+    password == null
+  ) {
     log('error', 'Some fields are not defined')
     throw new Error(errors.LOGIN_FAILED)
   }
@@ -60,37 +89,41 @@ async function authenticate(num, zipcode, born, password) {
 
   // Ask for authorization
   let token
-  await request({
-    url: `${baseUrl}/wps/s/GenerateTokenJwtPublic/`
-  }, (error, response, body) => {
-    try {
-      token = JSON.parse(body).cnafTokenJwt
+  await request(
+    {
+      url: `${baseUrl}/wps/s/GenerateTokenJwtPublic/`
+    },
+    (error, response, body) => {
+      try {
+        token = JSON.parse(body).cnafTokenJwt
+      } catch (err) {
+        log('error', err.message)
+        throw new Error(errors.VENDOR_DOWN)
+      }
     }
-    catch (err) {
-      log('error', err.message)
-      throw new Error(errors.VENDOR_DOWN)
-    }
-  })
+  )
 
-  // Retreive codeOrga : 
+  // Retreive codeOrga :
   let codeOrga
-  await request({
-    url: `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
-    headers: { 'Authorization': token }
-  }, (error, response, body) => {
-    try {
-      if (JSON.parse(body).listeCommunes.length == 0) {
-        log('error', 'Zip code is not valid or does not exist')
-        log('error', body)
+  await request(
+    {
+      url: `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
+      headers: { Authorization: token }
+    },
+    (error, response, body) => {
+      try {
+        if (JSON.parse(body).listeCommunes.length == 0) {
+          log('error', 'Zip code is not valid or does not exist')
+          log('error', body)
+          throw new Error(errors.LOGIN_FAILED)
+        }
+        codeOrga = JSON.parse(body).listeCommunes[0].codeOrga
+      } catch (err) {
+        log('error', err)
         throw new Error(errors.LOGIN_FAILED)
       }
-      codeOrga = JSON.parse(body).listeCommunes[0].codeOrga
     }
-    catch (err) {
-      log('error', err)
-      throw new Error(errors.LOGIN_FAILED)
-    }
-  })
+  )
 
   // Correspondences : caseCssClass / digit
   const assocClassDigit = [
@@ -103,28 +136,34 @@ async function authenticate(num, zipcode, born, password) {
     { digit: '6', class: 'case-xu' },
     { digit: '7', class: 'case-xx' },
     { digit: '8', class: 'case-xr' },
-    { digit: '9', class: 'case-xv' },
+    { digit: '9', class: 'case-xv' }
   ]
 
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
-  await request({
-    url: `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
-  }, (error, response, body) => {
-    try {
-      assocClassLetter = JSON.parse(body).listeCase
+  await request(
+    {
+      url: `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
+    },
+    (error, response, body) => {
+      try {
+        assocClassLetter = JSON.parse(body).listeCase
+      } catch (err) {
+        log('error', err)
+        log('error', body)
+        throw new Error(errors.VENDOR_DOWN)
+      }
     }
-    catch (err) {
-      log('error', err)
-      log('error', body)
-      throw new Error(errors.VENDOR_DOWN)
-    }
-  })
+  )
 
   // Parse password
-  const parsedPassword = parsePassword(password, assocClassLetter, assocClassDigit)
+  const parsedPassword = parsePassword(
+    password,
+    assocClassLetter,
+    assocClassDigit
+  )
 
-  // Authentication with all fields 
+  // Authentication with all fields
   await request({
     url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
     method: 'POST',
@@ -138,65 +177,85 @@ async function authenticate(num, zipcode, born, password) {
   })
 
   // Check if connected
-  await request('https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord', (error, response, body) => {
-   if (!response.request.uri.href.includes(`${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`)) {
-      log('error', 'An error occured while trying to connect with the given identifiers')
-      throw new Error(errors.LOGIN_FAILED)
+  await request(
+    'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord',
+    (error, response) => {
+      if (
+        !response.request.uri.href.includes(
+          `${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`
+        )
+      ) {
+        log(
+          'error',
+          'An error occured while trying to connect with the given identifiers'
+        )
+        throw new Error(errors.LOGIN_FAILED)
+      }
     }
-  })
+  )
 
   return codeOrga
 }
 
 async function parseDocuments(docs, token) {
+  let bills = []
+  for (var i = 0; i < docs.length; i++) {
+    const dateElab = parseDate(docs[i].dateElaboration)
+    const [yearElab, monthElab] = dateToYearMonth(dateElab)
+    // Get last day of the month for the request
+    const lastDayElab = daysInMonth(monthElab, yearElab)
 
-  const actualLength = docs.length
+    const date = parseDate(docs[i].dateEmission)
+    const amount = parseAmount(docs[i].montantPaiement)
 
-  for (var i = 0; i < actualLength; i++) {
-    const [year, month] = dateToYearMonth(parseDate(docs[i].dateElaboration))
-    docs[i].date = parseDate(docs[i].dateElaboration)
-    docs[i].amount = parseAmount(docs[i].montantPaiement)
-
-    // The PDF required an authorization 
-    docs[i].requestOptions = {
-      headers: {
-        'Authorization': token
-      }
-    }
-
-    // Get las day of the month for the request
-    const lastDay = daysInMonth(docs[i].date.getMonth() + 1, docs[i].date.getFullYear())
-
-    // Create bill for : Attestation de paiement
-    docs[i] = {
-      date: docs[i].date,
+    // Create bill for paiement
+    bills.push({
+      date,
+      amount,
       currency: '€',
-      requestOptions: docs[i].requestOptions,
-      amount: docs[i].amount,
+      requestOptions: {
+        // The PDF required an authorization
+        headers: {
+          Authorization: token
+        }
+      },
       vendor: 'caf',
-      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `${formatDate(docs[i].date)}_caf_attestation_paiement_${docs[i].amount.toFixed(2)}€.pdf`,
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
+      filename: `${formatShortDate(
+        dateElab
+      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
       metadata: {
         importDate: new Date(),
         version: 1
       }
-    }
-
-    // Create bill for : Allocation familiale
-    docs[docs.length] = {
-      date: docs[i].date,
-      requestOptions: docs[i].requestOptions,
-      vendor: 'caf',
-      amount: 0.0,
-      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `${formatDate(docs[i].date)}_caf_attestation_quotient_familial.pdf`,
-      metadata: {
-        importDate: new Date(),
-        version: 1
-      }
-    }
+    })
   }
-  return docs
+  return bills
+}
+
+async function parseAttestation(token) {
+  const today = Date.now()
+  const lastMonth = subMonths(today, 1)
+  const [year, month] = dateToYearMonth(lastMonth)
+  const lastDay = daysInMonth(month, year)
+
+  // A array with one element
+  return [
+    {
+      requestOptions: {
+        // The PDF required an authorization
+        headers: {
+          Authorization: token
+        }
+      },
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
+      filename: `caf_attestation_quotient_familial.pdf`,
+      metadata: {
+        importDate: new Date(),
+        version: 1
+      }
+    }
+  ]
 }
 
 function parsePassword(password, assocClassLetter, assocClassDigit) {
@@ -225,17 +284,13 @@ function parsePassword(password, assocClassLetter, assocClassDigit) {
 }
 
 // Convert a Date object to a ISO date string
-function formatDate(date) {
+function formatShortDate(date) {
   let year = date.getFullYear()
   let month = date.getMonth() + 1
-  let day = date.getDate()
   if (month < 10) {
     month = '0' + month
   }
-  if (day < 10) {
-    day = '0' + day
-  }
-  return `${year}-${month}-${day}`
+  return `${year}-${month}`
 }
 
 // Convert a date from format Ymmdd  to Date object
@@ -262,6 +317,7 @@ function parseAmount(amount) {
 }
 
 // Return number of days in the month
+// Month arg is natural month number here (1-indexed) and Date arg is 0-indexed
 function daysInMonth(month, year) {
-  return new Date(year, month, 0).getDate();
+  return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
 }
