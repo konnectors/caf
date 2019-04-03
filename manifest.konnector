@@ -91,7 +91,7 @@
           "placeholder": "DDMM"
         },
         "login": {
-          "label": "Numéro d'allocataire"
+          "label": "beneficiary number"
         }
       },
       "short_description": "Fetch your documents from the CAF website",
