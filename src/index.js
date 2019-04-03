@@ -26,7 +26,7 @@ module.exports = new BaseKonnector(start)
 async function start(fields) {
   log('info', 'Authenticating ...')
   const codeOrga = await authenticate(
-    fields.num,
+    fields.login,
     fields.zipcode,
     fields.born,
     fields.password
@@ -48,7 +48,7 @@ async function start(fields) {
   await request(
     {
       url: `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
-        fields.num
+        fields.login
       }`,
       headers: {
         Authorization: token
@@ -74,10 +74,10 @@ async function start(fields) {
   await saveFiles(files, fields)
 }
 
-async function authenticate(num, zipcode, born, password) {
+async function authenticate(login, zipcode, born, password) {
   if (
-    num == '' ||
-    num == null ||
+    login == '' ||
+    login == null ||
     zipcode == '' ||
     zipcode == null ||
     born == '' ||
@@ -175,7 +175,7 @@ async function authenticate(num, zipcode, born, password) {
     form: {
       codeOrga: codeOrga,
       jourMoisNaissance: born,
-      matricule: num,
+      matricule: login,
       positions: parsedPassword,
       typeCanal: 1
     }

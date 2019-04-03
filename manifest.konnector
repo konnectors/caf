@@ -10,6 +10,10 @@
   "vendor_link": "https://www.caf.fr/",
   "categories": ["public_service"],
   "fields": {
+    "login": {
+      "type": "text",
+      "label": "beneficiary number"
+    },
     "zipcode": {
       "type": "text"
     },
@@ -17,10 +21,6 @@
       "type": "text",
       "label": "Day and Month of birth",
       "placeholder": "DDMM"
-    },
-    "num": {
-      "type": "text",
-      "label": "beneficiary number"
     },
     "password": {
       "type": "password"
@@ -66,7 +66,7 @@
           "label": "Jour et mois de naissance",
           "placeholder": "JJMM"
         },
-        "num": {
+        "login": {
           "label": "Numéro d'allocataire"
         }
       },
