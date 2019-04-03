@@ -14,10 +14,13 @@
       "type": "text"
     },
     "born": {
-      "type": "text"
+      "type": "text",
+      "label": "Day and Month of birth",
+      "placeholder": "DDMM"
     },
     "num": {
-      "type": "text"
+      "type": "text",
+      "label": "beneficiary number"
     },
     "password": {
       "type": "password"
@@ -58,6 +61,10 @@
       "fields": {
         "zipcode": {
           "label": "Code postal"
+        },
+        "born": {
+          "label": "Jour et mois de naissance",
+          "placeholder": "JJMM"
         },
         "num": {
           "label": "Numéro d'allocataire"
