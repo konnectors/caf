@@ -1,0 +1,41 @@
+language: node_js
+node_js:
+- '8'
+env:
+  global:
+  - GH_USER_EMAIL="travis@example.org"
+  - GH_USER_NAME="cozy-bot"
+  - DEPLOY_REPOSITORY="git@github.com:konnectors/caf.git"
+  - secure: 1Xfq+tgTnAS9HAHe7AVtvwmkyTB9Om00lwayRatQ6RSbytdjW4FpBJ/+cO4VNiagFpNCgwV58O6GMKtUE43OsquXwSYoejq39PY9agviVeUldxu3eepjvGo86MWYy6pyTv+9QoDjmjgvRQLU6exg+naNFGUdqt3xxtMDveoQ/J+qfUKmK+DQS06qcLo1ozCUkX9Dbf8PqzFmCz7qjBsY6xTnNNxGHkurosEUPRp1l2nD4vyba0k1n6vlafMPJDwDRCSuRyNAXBfKBHay0QEdBJSDgDWDDuWYLgQIAplmXJF8ww89Tan7bJfSjtKBuZEmwFaM7aeX6K8h2PLDsENrLvLMCViy0tvSJIHCj2oD6EnkTuMKzgiLHBlCUAjNd6mXCy4ROYaz9FvZK5kUSnCmhqsoARKFvHgURTNWKzlKFSusHv63AKfFcXoQjzfC9mjdXCCWfnBYxiawiOlXwJsEKdY7i0wr+X7AomrRd2StsLdq0jzz1Z1qTHy1SsiCXe35B8O3uC91nrqzq0LuI6VZkBZPdCGDTNQycbysOdz7/WhUV1FAOLN/M3it9sclxm8lWwOM1bqBeQN8CNgg3Ecyoazp90UAexFtzhA8hY7TNO5+hLc2v7FIpFao3sslu/UUTQ1ReYpYOR30LdMDsCO4pdoO1e+wNwUFzwZebJMfAK0=
+cache:
+  yarn: true
+  directories:
+  - node_modules
+branches:
+  except:
+  - build
+  - build-debug
+script:
+- yarn lint
+- yarn build
+- yarn run check
+deploy:
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    branch: master
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    tags: true
+before_install:
+- openssl aes-256-cbc -K $encrypted_0ef76ad6c089_key -iv $encrypted_0ef76ad6c089_iv
+  -in github_deploy_key.enc -out /tmp/github_deploy_key -d
+- eval "$(ssh-agent -s)"
+- chmod 600 /tmp/github_deploy_key
+- ssh-add /tmp/github_deploy_key
+after_deploy:
+- rm /tmp/github_deploy_key
+- ssh-add -D
