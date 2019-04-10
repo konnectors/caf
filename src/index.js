@@ -10,7 +10,7 @@ const {
   errors,
   log
 } = require('cozy-konnector-libs')
-const request = requestFactory({
+let request = requestFactory({
   //debug: true,
   cheerio: true,
   json: false,
@@ -34,9 +34,13 @@ async function start(fields) {
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
-  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`, {
-    json: true
-  })).cnafTokenJwt
+  request = requestFactory({
+    cheerio: false,
+    json: true,
+    jar: true
+})
+
+  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`)).cnafTokenJwt
 
   const paiements = (await request(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
@@ -45,8 +49,7 @@ async function start(fields) {
     {
       headers: {
         Authorization: token
-      },
-      json: true
+      }
     }
   )).paiements
 
@@ -85,10 +88,13 @@ async function authenticate(login, zipcode, born, password) {
 
   // Ask for authorization
   let token
+  request = requestFactory({
+    cheerio: false,
+    json: true,
+    jar: true
+  })
   try {
-    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`, {
-      json: true
-    })).cnafTokenJwt
+    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`)).cnafTokenJwt
   } catch (err) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
@@ -100,8 +106,7 @@ async function authenticate(login, zipcode, born, password) {
     listeCommunes = (await request(
       `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
       {
-        headers: { Authorization: token },
-        json: true
+        headers: { Authorization: token }
       }
     )).listeCommunes
   } catch (err) {
@@ -134,10 +139,7 @@ async function authenticate(login, zipcode, born, password) {
   let assocClassLetter
   try {
     assocClassLetter = (await request(
-      `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`,
-      {
-        json: true
-      }
+      `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
     )).listeCase
   } catch (err) {
     log('error', err)
@@ -152,6 +154,11 @@ async function authenticate(login, zipcode, born, password) {
   )
 
   // Authentication with all fields
+  request = requestFactory({
+    cheerio: true,
+    json: false,
+    jar: true
+  })
   await request({
     url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
     method: 'POST',
