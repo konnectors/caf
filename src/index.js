@@ -10,7 +10,7 @@ const {
   errors,
   log
 } = require('cozy-konnector-libs')
-const request = requestFactory({
+let request = requestFactory({
   //debug: true,
   cheerio: true,
   json: false,
@@ -34,30 +34,24 @@ async function start(fields) {
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
-  let token
-  await request(
-    {
-      url: `${baseUrl}/wps/s/GenerateTokenJwt/`
-    },
-    (error, response, body) => {
-      token = JSON.parse(body).cnafTokenJwt
-    }
-  )
+  request = requestFactory({
+    cheerio: false,
+    json: true,
+    jar: true
+})
 
-  let paiements
-  await request(
+  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`)).cnafTokenJwt
+
+  const paiements = (await request(
+    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
+      fields.login
+    }`,
     {
-      url: `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
-        fields.login
-      }`,
       headers: {
         Authorization: token
       }
-    },
-    (error, response, body) => {
-      paiements = JSON.parse(body).paiements
     }
-  )
+  )).paiements
 
   log('info', 'Parsing bills')
   const bills = await parseDocuments(paiements, token)
@@ -94,41 +88,38 @@ async function authenticate(login, zipcode, born, password) {
 
   // Ask for authorization
   let token
-  await request(
-    {
-      url: `${baseUrl}/wps/s/GenerateTokenJwtPublic/`
-    },
-    (error, response, body) => {
-      try {
-        token = JSON.parse(body).cnafTokenJwt
-      } catch (err) {
-        log('error', err.message)
-        throw new Error(errors.VENDOR_DOWN)
-      }
-    }
-  )
+  request = requestFactory({
+    cheerio: false,
+    json: true,
+    jar: true
+  })
+  try {
+    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`)).cnafTokenJwt
+  } catch (err) {
+    log('error', err.message)
+    throw new Error(errors.VENDOR_DOWN)
+  }
 
   // Retreive codeOrga :
-  let codeOrga
-  await request(
-    {
-      url: `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
-      headers: { Authorization: token }
-    },
-    (error, response, body) => {
-      try {
-        if (JSON.parse(body).listeCommunes.length == 0) {
-          log('error', 'Zip code is not valid or does not exist')
-          log('error', body)
-          throw new Error(errors.LOGIN_FAILED)
-        }
-        codeOrga = JSON.parse(body).listeCommunes[0].codeOrga
-      } catch (err) {
-        log('error', err)
-        throw new Error(errors.LOGIN_FAILED)
+  let listeCommunes
+  try {
+    listeCommunes = (await request(
+      `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
+      {
+        headers: { Authorization: token }
       }
-    }
-  )
+    )).listeCommunes
+  } catch (err) {
+    log('error', err.message)
+    throw new Error(errors.LOGIN_FAILED)
+  }
+
+  if (listeCommunes.length === 0) {
+    log('error', 'Zip code is not valid or does not exist')
+    throw new Error(errors.LOGIN_FAILED)
+  }
+
+  const codeOrga = listeCommunes[0].codeOrga
 
   // Correspondences : caseCssClass / digit
   const assocClassDigit = [
@@ -146,20 +137,14 @@ async function authenticate(login, zipcode, born, password) {
 
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
-  await request(
-    {
-      url: `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
-    },
-    (error, response, body) => {
-      try {
-        assocClassLetter = JSON.parse(body).listeCase
-      } catch (err) {
-        log('error', err)
-        log('error', body)
-        throw new Error(errors.VENDOR_DOWN)
-      }
-    }
-  )
+  try {
+    assocClassLetter = (await request(
+      `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
+    )).listeCase
+  } catch (err) {
+    log('error', err)
+    throw new Error(errors.VENDOR_DOWN)
+  }
 
   // Parse password
   const parsedPassword = parsePassword(
@@ -169,6 +154,11 @@ async function authenticate(login, zipcode, born, password) {
   )
 
   // Authentication with all fields
+  request = requestFactory({
+    cheerio: true,
+    json: false,
+    jar: true
+  })
   await request({
     url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
     method: 'POST',
@@ -182,22 +172,24 @@ async function authenticate(login, zipcode, born, password) {
   })
 
   // Check if connected
-  await request(
+  const response = await request(
     'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord',
-    (error, response) => {
-      if (
-        !response.request.uri.href.includes(
-          `${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`
-        )
-      ) {
-        log(
-          'error',
-          'An error occured while trying to connect with the given identifiers'
-        )
-        throw new Error(errors.LOGIN_FAILED)
-      }
+    {
+      resolveWithFullResponse: true
     }
   )
+
+  if (
+    !response.request.uri.href.includes(
+      `${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`
+    )
+  ) {
+    log(
+      'error',
+      'An error occured while trying to connect with the given identifiers'
+    )
+    throw new Error(errors.LOGIN_FAILED)
+  }
 
   return codeOrga
 }
