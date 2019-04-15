@@ -11,7 +11,7 @@ const {
   log
 } = require('cozy-konnector-libs')
 let request = requestFactory({
-  //debug: true,
+  debug: true,
   cheerio: true,
   json: false,
   jar: true
@@ -25,12 +25,18 @@ module.exports = new BaseKonnector(start)
 
 async function start(fields) {
   log('info', 'Authenticating ...')
-  const codeOrga = await authenticate(
-    fields.login,
-    fields.zipcode,
-    fields.born,
-    fields.password
-  )
+  let codeOrga
+  try {
+    codeOrga = await authenticate(
+      fields.login,
+      fields.zipcode,
+      fields.born,
+      fields.password
+    )
+  } catch (e) {
+    log('error', e.message)
+    throw new Error(errors.VENDOR_DOWN)
+  }
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
@@ -38,9 +44,10 @@ async function start(fields) {
     cheerio: false,
     json: true,
     jar: true
-})
+  })
 
-  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`)).cnafTokenJwt
+  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`))
+    .cnafTokenJwt
 
   const paiements = (await request(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
@@ -94,7 +101,8 @@ async function authenticate(login, zipcode, born, password) {
     jar: true
   })
   try {
-    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`)).cnafTokenJwt
+    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`))
+      .cnafTokenJwt
   } catch (err) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
