@@ -34,8 +34,12 @@ async function start(fields) {
       fields.password
     )
   } catch (e) {
-    log('error', e.message)
-    throw new Error(errors.VENDOR_DOWN)
+    if (e.message === 'LOGIN_FAILED') {
+      throw e
+    } else {
+      log('error', e.message)
+      throw new Error(errors.VENDOR_DOWN)
+    }
   }
   log('info', 'Successfully logged in')
 
