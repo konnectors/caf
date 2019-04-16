@@ -11,7 +11,7 @@ const {
   log
 } = require('cozy-konnector-libs')
 let request = requestFactory({
-  debug: true,
+  // debug: true,
   cheerio: true,
   json: false,
   jar: true
