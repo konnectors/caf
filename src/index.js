@@ -96,6 +96,7 @@ async function authenticate(login, zipcode, born, password) {
 
   // Reset / Create session
   await request('https://wwwd.caf.fr/wps/portal/caffr/login#/signature')
+  log('warn', 'First signature')
 
   // Ask for authorization
   let token
@@ -111,6 +112,7 @@ async function authenticate(login, zipcode, born, password) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
   }
+  log('warn', 'Got JWT, ask zipCode')
 
   // Retreive codeOrga :
   let listeCommunes
@@ -123,7 +125,7 @@ async function authenticate(login, zipcode, born, password) {
     )).listeCommunes
   } catch (err) {
     log('error', err.message)
-    throw new Error(errors.LOGIN_FAILED)
+    throw new Error(errors.VENDOR_DOWN)
   }
 
   if (listeCommunes.length === 0) {
@@ -147,6 +149,7 @@ async function authenticate(login, zipcode, born, password) {
     { digit: '9', class: 'case-xv' }
   ]
 
+  log('warn', 'Getting clavier_virtuel')
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
   try {
@@ -165,6 +168,7 @@ async function authenticate(login, zipcode, born, password) {
     assocClassDigit
   )
 
+  log('warn', 'Launching POST')
   // Authentication with all fields
   request = requestFactory({
     cheerio: true,
@@ -184,6 +188,7 @@ async function authenticate(login, zipcode, born, password) {
   })
 
   // Check if connected
+  log('warn', 'Checking for login')
   const response = await request(
     'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord',
     {
