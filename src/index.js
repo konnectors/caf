@@ -10,10 +10,16 @@ const {
   errors,
   log
 } = require('cozy-konnector-libs')
-let request = requestFactory({
+const requestHTML = requestFactory({
   // debug: true,
   cheerio: true,
   json: false,
+  jar: true
+})
+const requestJSON = requestFactory({
+  // debug: true,
+  cheerio: false,
+  json: true,
   jar: true
 })
 
@@ -44,16 +50,10 @@ async function start(fields) {
   log('info', 'Successfully logged in')
 
   log('info', 'Fetching the list of documents')
-  request = requestFactory({
-    cheerio: false,
-    json: true,
-    jar: true
-  })
-
-  const token = (await request(`${baseUrl}/wps/s/GenerateTokenJwt/`))
+  const token = (await requestJSON(`${baseUrl}/wps/s/GenerateTokenJwt/`))
     .cnafTokenJwt
 
-  const paiements = (await request(
+  const paiements = (await requestJSON(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
       fields.login
     }`,
@@ -95,18 +95,13 @@ async function authenticate(login, zipcode, born, password) {
   }
 
   // Reset / Create session
-  await request('https://wwwd.caf.fr/wps/portal/caffr/login#/signature')
+  await requestHTML('https://wwwd.caf.fr/wps/portal/caffr/login#/signature')
   log('warn', 'First signature')
 
   // Ask for authorization
   let token
-  request = requestFactory({
-    cheerio: false,
-    json: true,
-    jar: true
-  })
   try {
-    token = (await request(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`))
+    token = (await requestJSON(`${baseUrl}/wps/s/GenerateTokenJwtPublic/`))
       .cnafTokenJwt
   } catch (err) {
     log('error', err.message)
@@ -117,7 +112,7 @@ async function authenticate(login, zipcode, born, password) {
   // Retreive codeOrga :
   let listeCommunes
   try {
-    listeCommunes = (await request(
+    listeCommunes = (await requestJSON(
       `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
       {
         headers: { Authorization: token }
@@ -153,7 +148,7 @@ async function authenticate(login, zipcode, born, password) {
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
   try {
-    assocClassLetter = (await request(
+    assocClassLetter = (await requestJSON(
       `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
     )).listeCase
   } catch (err) {
@@ -170,12 +165,7 @@ async function authenticate(login, zipcode, born, password) {
 
   log('warn', 'Launching POST')
   // Authentication with all fields
-  request = requestFactory({
-    cheerio: true,
-    json: false,
-    jar: true
-  })
-  await request({
+  await requestHTML({
     url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
     method: 'POST',
     form: {
@@ -189,7 +179,7 @@ async function authenticate(login, zipcode, born, password) {
 
   // Check if connected
   log('warn', 'Checking for login')
-  const response = await request(
+  const response = await requestHTML(
     'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord',
     {
       resolveWithFullResponse: true
