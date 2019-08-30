@@ -24,8 +24,8 @@ const requestJSON = requestFactory({
 })
 
 const baseUrl = 'https://wwwd.caf.fr'
-const lastDayOfMonth = require('date-fns').lastDayOfMonth
-const subMonths = require('date-fns').subMonths
+const lastDayOfMonth = require('date-fns/lastDayOfMonth')
+const subMonths = require('date-fns/subMonths')
 
 module.exports = new BaseKonnector(start)
 
