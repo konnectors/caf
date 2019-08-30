@@ -73,10 +73,16 @@ async function start(fields) {
   log('info', 'Saving data to Cozy')
   await saveBills(bills, fields, {
     identifiers: ['caf'],
-    contentType: 'application/pdf'
+    contentType: 'application/pdf',
+    shouldUpdate: (entry, dbEntry) => dbEntry.metadata,
+    sourceAccount: this.accountId,
+    sourceAccountIdentifier: fields.login
   })
   // Only one attestation send, replaced each time
-  await saveFiles(files, fields)
+  await saveFiles(files, fields, {
+    sourceAccount: this.accountId,
+    sourceAccountIdentifier: fields.login
+  })
 }
 
 async function authenticate(login, zipcode, born, password) {
@@ -216,6 +222,7 @@ async function parseDocuments(docs, token) {
     bills.push({
       date,
       amount,
+      isRefund: true,
       currency: '€',
       requestOptions: {
         // The PDF required an authorization
@@ -227,11 +234,7 @@ async function parseDocuments(docs, token) {
       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
       filename: `${formatShortDate(
         dateElab
-      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
-      metadata: {
-        importDate: new Date(),
-        version: 1
-      }
+      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`
     })
   }
   return bills
@@ -254,11 +257,7 @@ async function parseAttestation(token) {
         }
       },
       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `caf_attestation_quotient_familial.pdf`,
-      metadata: {
-        importDate: new Date(),
-        version: 1
-      }
+      filename: `caf_attestation_quotient_familial.pdf`
     }
   ]
 }
