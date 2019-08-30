@@ -3,9 +3,10 @@ node_js:
 - '8'
 env:
   global:
-  - MATTERMOST_CHANNEL=teamconnecteurs
   - DEPLOY_REPOSITORY="git@github.com:konnectors/caf.git"
+  # REGISTRY_TOKEN(editor=cozy, app=caf)
   - secure: 1Xfq+tgTnAS9HAHe7AVtvwmkyTB9Om00lwayRatQ6RSbytdjW4FpBJ/+cO4VNiagFpNCgwV58O6GMKtUE43OsquXwSYoejq39PY9agviVeUldxu3eepjvGo86MWYy6pyTv+9QoDjmjgvRQLU6exg+naNFGUdqt3xxtMDveoQ/J+qfUKmK+DQS06qcLo1ozCUkX9Dbf8PqzFmCz7qjBsY6xTnNNxGHkurosEUPRp1l2nD4vyba0k1n6vlafMPJDwDRCSuRyNAXBfKBHay0QEdBJSDgDWDDuWYLgQIAplmXJF8ww89Tan7bJfSjtKBuZEmwFaM7aeX6K8h2PLDsENrLvLMCViy0tvSJIHCj2oD6EnkTuMKzgiLHBlCUAjNd6mXCy4ROYaz9FvZK5kUSnCmhqsoARKFvHgURTNWKzlKFSusHv63AKfFcXoQjzfC9mjdXCCWfnBYxiawiOlXwJsEKdY7i0wr+X7AomrRd2StsLdq0jzz1Z1qTHy1SsiCXe35B8O3uC91nrqzq0LuI6VZkBZPdCGDTNQycbysOdz7/WhUV1FAOLN/M3it9sclxm8lWwOM1bqBeQN8CNgg3Ecyoazp90UAexFtzhA8hY7TNO5+hLc2v7FIpFao3sslu/UUTQ1ReYpYOR30LdMDsCO4pdoO1e+wNwUFzwZebJMfAK0=
+  # MATTERMOST_HOOK_URL
   - secure: SoD+bTpWBrNpImFvKBGOvqATPlxoWFwTUB/YmHcyWJFHDL+Vp7uEg1aVcQ9Ag0PM8uEDRz+j10mwUurdwNDPeOsWnMB1ZhqRxabCavq3JiTRx4+GtFZ5WZiLNWB62WhaBL/bblzszyc16Xh3k75mySrRLU6M5ZvDfe+d4pWQLq+vMyVLMSShd+kzxDTKYs+v2MyKc8nNq4rTBcj0ZyGd0WruyiKUzzNWxIbMj9w/dka57R1zY4VSsP5IVZG9b2X9f0mEjkNg0EHYoyV1nAeXVetL8E44W4gV0Tke0PuZZpFHKaRho1v2iPc5VWmsCcLbPRimxbtn080es9so0Q4zcIWA7uMX5ops+42tV8KL9Zh4V2g+o67ZIKLoL9rdougCT+glYYtk1SxceMrqVPrNfZ8kHla/urEv29lkCsgB7wEotTdPS7PUnl34i+zcQ+ohdU2gp+RJaJmgr5ApDTFWZFRxkpUZa82l9A7gsv1Smv1Uc631chvjpmJNWRMbwfWLZtuPchb+qrOUbCBk18mzYiGm5+YMUjX7uge6f8aAT5FGibLQmP74pB7BFntnQmE1ktY3Ll5VBZ/Zvl7QRaGDv59XEwqGXcSF2g05QuAGUgBS8ugA4ja1gjJadQ8g3ODJXPEDCFE/L3vJzj7v7V+GjkhUpoKrjBifNW87ce1vVAc=
 cache:
   yarn: true
@@ -18,7 +19,6 @@ branches:
 script:
 - yarn lint
 - yarn build
-# - yarn run check
 deploy:
 - provider: script
   skip-cleanup: true
