@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.6.3",
   "name": "CAF",
   "type": "konnector",
   "language": "node",
@@ -13,13 +13,18 @@
   ],
   "fields": {
     "login": {
-      "type": "text"
+      "type": "text",
+      "max": 7
     },
     "zipcode": {
-      "type": "text"
+      "type": "text",
+      "min": 5,
+      "max": 5
     },
     "born": {
-      "type": "text"
+      "type": "text",
+      "min": 4,
+      "max": 4
     },
     "password": {
       "type": "password"
