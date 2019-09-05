@@ -30,6 +30,7 @@ const subMonths = require('date-fns').subMonths
 module.exports = new BaseKonnector(start)
 
 async function start(fields) {
+  fields.login = normalizeLogin(fields.login)
   log('info', 'Authenticating ...')
   let codeOrga
   try {
@@ -324,4 +325,13 @@ function parseAmount(amount) {
 // Month arg is natural month number here (1-indexed) and Date arg is 0-indexed
 function daysInMonth(month, year) {
   return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
+}
+
+function normalizeLogin(login) {
+  if (login && login.length < 7 && login.padStart) {
+    log('info', 'Had to normalize login length to 7 chars')
+    return login.padStart(7, '0')
+  }
+
+  return login
 }
