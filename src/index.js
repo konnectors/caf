@@ -55,9 +55,7 @@ async function start(fields) {
     .cnafTokenJwt
 
   const paiements = (await requestJSON(
-    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${
-      fields.login
-    }`,
+    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.login}`,
     {
       headers: {
         Authorization: token
