@@ -33,7 +33,7 @@ async function start(fields) {
   log('info', 'Authenticating ...')
   let codeOrga
   try {
-    codeOrga = await authenticate(
+    codeOrga = await authenticate.bind(this)(
       fields.login,
       fields.zipcode,
       fields.born,
@@ -53,14 +53,16 @@ async function start(fields) {
   const token = (await requestJSON(`${baseUrl}/wps/s/GenerateTokenJwt/`))
     .cnafTokenJwt
 
-  const paiements = (await requestJSON(
-    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.login}`,
-    {
-      headers: {
-        Authorization: token
+  const paiements = (
+    await requestJSON(
+      `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.login}`,
+      {
+        headers: {
+          Authorization: token
+        }
       }
-    }
-  )).paiements
+    )
+  ).paiements
 
   log('info', 'Parsing bills')
   const bills = await parseDocuments(paiements, token)
@@ -113,12 +115,14 @@ async function authenticate(login, zipcode, born, password) {
   // Retreive codeOrga :
   let listeCommunes
   try {
-    listeCommunes = (await requestJSON(
-      `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
-      {
-        headers: { Authorization: token }
-      }
-    )).listeCommunes
+    listeCommunes = (
+      await requestJSON(
+        `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
+        {
+          headers: { Authorization: token }
+        }
+      )
+    ).listeCommunes
   } catch (err) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
@@ -149,9 +153,11 @@ async function authenticate(login, zipcode, born, password) {
   // Retreivre correspondences : caseCssClass / letter
   let assocClassLetter
   try {
-    assocClassLetter = (await requestJSON(
-      `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
-    )).listeCase
+    assocClassLetter = (
+      await requestJSON(
+        `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
+      )
+    ).listeCase
   } catch (err) {
     log('error', err)
     throw new Error(errors.VENDOR_DOWN)
