@@ -33,7 +33,7 @@ async function start(fields) {
   log('info', 'Authenticating ...')
   let codeOrga
   try {
-    codeOrga = await authenticate(
+    codeOrga = await authenticate.bind(this)(
       fields.login,
       fields.zipcode,
       fields.born,
