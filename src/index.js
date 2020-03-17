@@ -5,8 +5,6 @@ process.env.SENTRY_DSN =
 const {
   BaseKonnector,
   requestFactory,
-  saveBills,
-  saveFiles,
   errors,
   log
 } = require('cozy-konnector-libs')
@@ -30,6 +28,7 @@ const subMonths = require('date-fns').subMonths
 module.exports = new BaseKonnector(start)
 
 async function start(fields) {
+  await this.deactivateAutoSuccessfulLogin()
   fields.login = normalizeLogin(fields.login)
   log('info', 'Authenticating ...')
   let codeOrga
@@ -70,17 +69,14 @@ async function start(fields) {
   const files = await parseAttestation(token)
 
   log('info', 'Saving data to Cozy')
-  await saveBills(bills, fields, {
-    identifiers: ['caf'],
+  await this.saveBills(bills, fields, {
     contentType: 'application/pdf',
-    shouldUpdate: (entry, dbEntry) => dbEntry.metadata,
-    sourceAccount: this.accountId,
-    sourceAccountIdentifier: fields.login
+    linkBankOperations: false,
+    fileIdAttributes: ['date', 'amount']
   })
   // Only one attestation send, replaced each time
-  await saveFiles(files, fields, {
-    sourceAccount: this.accountId,
-    sourceAccountIdentifier: fields.login
+  await this.saveFiles(files, fields, {
+    fileIdAttributes: ['filename']
   })
 }
 
@@ -202,6 +198,7 @@ async function authenticate(login, zipcode, born, password) {
     )
     throw new Error(errors.LOGIN_FAILED)
   }
+  await this.notifySuccessfulLogin()
 
   return codeOrga
 }
