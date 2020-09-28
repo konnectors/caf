@@ -9,13 +9,13 @@ const {
   log
 } = require('cozy-konnector-libs')
 const requestHTML = requestFactory({
-  // debug: true,
+  debug: true,
   cheerio: true,
   json: false,
   jar: true
 })
 const requestJSON = requestFactory({
-  // debug: true,
+  debug: true,
   cheerio: false,
   json: true,
   jar: true
@@ -40,7 +40,7 @@ async function start(fields) {
       fields.password
     )
   } catch (e) {
-    if (e.message === 'LOGIN_FAILED') {
+    if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
       throw e
     } else {
       log('error', e.message)
@@ -96,7 +96,10 @@ async function authenticate(login, zipcode, born, password) {
   }
 
   // Reset / Create session
-  await requestHTML('https://wwwd.caf.fr/wps/portal/caffr/login#/signature')
+  const firstResp = await requestHTML('https://wwwd.caf.fr', {
+    resolveWithFullResponse: true
+  })
+  const referrer = firstResp.request.uri.href
   log('warn', 'First signature')
 
   // Ask for authorization
@@ -114,7 +117,7 @@ async function authenticate(login, zipcode, born, password) {
   let listeCommunes
   try {
     listeCommunes = (await requestJSON(
-      `${baseUrl}/api/loginfront/v1/mon_compte/communes/${zipcode}`,
+      `${baseUrl}/api/connexionmiddle/v1/communes/${zipcode}`,
       {
         headers: { Authorization: token }
       }
@@ -129,7 +132,7 @@ async function authenticate(login, zipcode, born, password) {
     throw new Error(errors.LOGIN_FAILED)
   }
 
-  const codeOrga = listeCommunes[0].codeOrga
+  const codeOrga = listeCommunes[0].codeOrganisme
 
   // Correspondences : caseCssClass / digit
   const assocClassDigit = [
@@ -146,11 +149,16 @@ async function authenticate(login, zipcode, born, password) {
   ]
 
   log('warn', 'Getting clavier_virtuel')
-  // Retreivre correspondences : caseCssClass / letter
+  // Retrieve correspondences : caseCssClass / letter
   let assocClassLetter
   try {
     assocClassLetter = (await requestJSON(
-      `${baseUrl}/wta-portletangular-web/s/clavier_virtuel?nbCases=15`
+      `${baseUrl}/api/connexionmiddle/v1/clavier_virtuel?nb_cases=15`,
+      {
+        headers: {
+          Authorization: token
+        }
+      }
     )).listeCase
   } catch (err) {
     log('error', err)
@@ -166,17 +174,32 @@ async function authenticate(login, zipcode, born, password) {
 
   log('warn', 'Launching POST')
   // Authentication with all fields
-  await requestHTML({
-    url: `${baseUrl}/wta-portletangular-web/s/authentifier_mdp`,
+  await requestHTML(`${baseUrl}/wps/session/RefreshSession.jsp`)
+  const authResp = await requestJSON({
+    url: `${baseUrl}/api/connexionmiddle/v1/verifier_mdp`,
+    gzip: true,
+    headers: {
+      Authorization: token,
+      'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3',
+      'User-Agent':
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:80.0) Gecko/20100101 Firefox/80.0',
+      Referer: referrer,
+      Origin: baseUrl
+    },
     method: 'POST',
     form: {
-      codeOrga: codeOrga,
+      codeOrga,
       jourMoisNaissance: born,
       matricule: login,
       positions: parsedPassword,
-      typeCanal: 1
+      modeAccessible: false,
+      origineDemande: 'WEB'
     }
   })
+
+  if (authResp.cguAValider === true) {
+    throw new Error('USER_ACTION_NEEDED.CGU_FORM')
+  }
 
   // Check if connected
   log('warn', 'Checking for login')
