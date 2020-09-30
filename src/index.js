@@ -9,13 +9,13 @@ const {
   log
 } = require('cozy-konnector-libs')
 const requestHTML = requestFactory({
-  debug: true,
+  debug: false,
   cheerio: true,
   json: false,
   jar: true
 })
 const requestJSON = requestFactory({
-  debug: true,
+  debug: false,
   cheerio: false,
   json: true,
   jar: true
@@ -96,10 +96,9 @@ async function authenticate(login, zipcode, born, password) {
   }
 
   // Reset / Create session
-  const firstResp = await requestHTML('https://wwwd.caf.fr', {
+  await requestHTML('https://wwwd.caf.fr', {
     resolveWithFullResponse: true
   })
-  const referrer = firstResp.request.uri.href
   log('warn', 'First signature')
 
   // Ask for authorization
@@ -179,15 +178,10 @@ async function authenticate(login, zipcode, born, password) {
     url: `${baseUrl}/api/connexionmiddle/v1/verifier_mdp`,
     gzip: true,
     headers: {
-      Authorization: token,
-      'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3',
-      'User-Agent':
-        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:80.0) Gecko/20100101 Firefox/80.0',
-      Referer: referrer,
-      Origin: baseUrl
+      Authorization: token
     },
     method: 'POST',
-    form: {
+    json: {
       codeOrga,
       jourMoisNaissance: born,
       matricule: login,
