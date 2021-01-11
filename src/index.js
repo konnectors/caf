@@ -6,7 +6,8 @@ const {
   BaseKonnector,
   requestFactory,
   errors,
-  log
+  log,
+  retry
 } = require('cozy-konnector-libs')
 const requestHTML = requestFactory({
   debug: false,
@@ -33,12 +34,12 @@ async function start(fields) {
   log('info', 'Authenticating ...')
   let codeOrga
   try {
-    codeOrga = await authenticate.bind(this)(
-      fields.login,
-      fields.zipcode,
-      fields.born,
-      fields.password
-    )
+    codeOrga = await retry(authenticate, {
+      backoff: 3,
+      throw_original: true,
+      context: this,
+      args: [fields.login, fields.zipcode, fields.born, fields.password]
+    })
   } catch (e) {
     if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
       throw e
@@ -99,7 +100,7 @@ async function authenticate(login, zipcode, born, password) {
   await requestHTML('https://wwwd.caf.fr', {
     resolveWithFullResponse: true
   })
-  log('warn', 'First signature')
+  log('debug', 'First signature')
 
   // Ask for authorization
   let token
@@ -110,7 +111,7 @@ async function authenticate(login, zipcode, born, password) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
   }
-  log('warn', 'Got JWT, ask zipCode')
+  log('debug', 'Got JWT, ask zipCode')
 
   // Retreive codeOrga :
   let listeCommunes
@@ -147,7 +148,7 @@ async function authenticate(login, zipcode, born, password) {
     { digit: '9', class: 'case-xv' }
   ]
 
-  log('warn', 'Getting clavier_virtuel')
+  log('debug', 'Getting clavier_virtuel')
   // Retrieve correspondences : caseCssClass / letter
   let assocClassLetter
   try {
@@ -171,7 +172,7 @@ async function authenticate(login, zipcode, born, password) {
     assocClassDigit
   )
 
-  log('warn', 'Launching POST')
+  log('debug', 'Launching POST')
   // Authentication with all fields
   await requestHTML(`${baseUrl}/wps/session/RefreshSession.jsp`)
   const authResp = await requestJSON({
@@ -196,7 +197,7 @@ async function authenticate(login, zipcode, born, password) {
   }
 
   // Check if connected
-  log('warn', 'Checking for login')
+  log('debug', 'Checking for login')
   const response = await requestHTML(
     'https://wwwd.caf.fr/wps/myportal/caffr/moncompte/tableaudebord',
     {
@@ -247,7 +248,12 @@ async function parseDocuments(docs, token) {
       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
       filename: `${formatShortDate(
         dateElab
-      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`
+      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
+      fileAttributes: {
+        metadata: {
+          carbonCopy: true
+        }
+      }
     })
   }
   return bills
@@ -270,7 +276,12 @@ async function parseAttestation(token) {
         }
       },
       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `caf_attestation_quotient_familial.pdf`
+      filename: `caf_attestation_quotient_familial.pdf`,
+      fileAttributes: {
+        metadata: {
+          carbonCopy: true
+        }
+      }
     }
   ]
 }
