@@ -1,6 +1,6 @@
 {
   "name": "cozy-konnector-caf",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "date-fns": "2.16.1"
   },
   "devDependencies": {
-    "cozy-jobs-cli": "1.15.5",
+    "cozy-jobs-cli": "1.15.7",
     "cozy-konnector-build": "1.1.5"
   }
 }
