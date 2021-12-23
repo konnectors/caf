@@ -10,21 +10,21 @@ const {
   retry
 } = require('cozy-konnector-libs')
 const requestHTML = requestFactory({
-  debug: false,
+  debug: true,
   cheerio: true,
   json: false,
   jar: true
 })
 const requestJSON = requestFactory({
-  debug: false,
+  debug: true,
   cheerio: false,
   json: true,
   jar: true
 })
 
 const baseUrl = 'https://wwwd.caf.fr'
-const lastDayOfMonth = require('date-fns').lastDayOfMonth
-const subMonths = require('date-fns').subMonths
+// const lastDayOfMonth = require('date-fns').lastDayOfMonth
+// const subMonths = require('date-fns').subMonths
 
 module.exports = new BaseKonnector(start)
 
@@ -32,9 +32,9 @@ async function start(fields) {
   await this.deactivateAutoSuccessfulLogin()
   fields.login = normalizeLogin(fields.login)
   log('info', 'Authenticating ...')
-  let codeOrga
+  let LtpaToken2
   try {
-    codeOrga = await retry(authenticate, {
+    LtpaToken2 = await retry(authenticate, {
       backoff: 3,
       throw_original: true,
       context: this,
@@ -49,36 +49,66 @@ async function start(fields) {
     }
   }
   log('info', 'Successfully logged in')
+  log('info', `LtpaToken => ${LtpaToken2}`)
 
   log('info', 'Fetching the list of documents')
-  const token = (await requestJSON(`${baseUrl}/wps/s/GenerateTokenJwt/`))
-    .cnafTokenJwt
 
-  const paiements = (await requestJSON(
-    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements?cache=${codeOrga}_${fields.login}`,
+  const token = await requestHTML({
+    url: `${baseUrl}/wps/s/GenerateTokenJwt/`,
+    gzip: true,
+    headers: {
+      Cookie: `${LtpaToken2}`
+    },
+    method: 'GET',
+    resolveWithFullResponse: true
+  })
+
+  const parsedCnafToken = JSON.parse(token.req.res.body)
+  const cnafToken = parsedCnafToken.cnafTokenJwt
+
+  // log('info', cnafToken)
+
+  // await requestJSON(`${baseUrl}/api/statistiquesfront/v1/sid`, {
+  //   headers: {
+  //     Authorization: `${cnafToken}`
+  //   },
+  //   body: {
+  //     composant: 'AttestationsAppli',
+  //     parametres: '',
+  //     portailVirtuel: 'caffr',
+  //     rubrique: 'DOSWEB',
+  //     sousRubrique: 'DOSATTVISUWEB'
+  //   },
+  //   method: 'POST'
+  // })
+  const paiements = await requestJSON(
+    `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/20191201/20211130`,
     {
       headers: {
-        Authorization: token
-      }
+        Authorization: `${cnafToken}`
+      },
+      resolveWithFullResponse: true
     }
-  )).paiements
+  )
 
-  log('info', 'Parsing bills')
-  const bills = await parseDocuments(paiements, token)
+  log('info', paiements)
 
-  log('info', 'Parsing attestation')
-  const files = await parseAttestation(token)
+  // log('info', 'Parsing bills')
+  // const bills = await parseDocuments(paiements, token)
 
-  log('info', 'Saving data to Cozy')
-  await this.saveBills(bills, fields, {
-    contentType: 'application/pdf',
-    linkBankOperations: false,
-    fileIdAttributes: ['date', 'amount']
-  })
-  // Only one attestation send, replaced each time
-  await this.saveFiles(files, fields, {
-    fileIdAttributes: ['filename']
-  })
+  // log('info', 'Parsing attestation')
+  // const files = await parseAttestation(token)
+
+  // log('info', 'Saving data to Cozy')
+  // await this.saveBills(bills, fields, {
+  //   contentType: 'application/pdf',
+  //   linkBankOperations: false,
+  //   fileIdAttributes: ['date', 'amount']
+  // })
+  // // Only one attestation send, replaced each time
+  // await this.saveFiles(files, fields, {
+  //   fileIdAttributes: ['filename']
+  // })
 }
 
 async function authenticate(login, zipcode, born, password) {
@@ -111,90 +141,44 @@ async function authenticate(login, zipcode, born, password) {
     log('error', err.message)
     throw new Error(errors.VENDOR_DOWN)
   }
-  log('debug', 'Got JWT, ask zipCode')
-
-  // Retreive codeOrga :
-  let listeCommunes
-  try {
-    listeCommunes = (await requestJSON(
-      `${baseUrl}/api/connexionmiddle/v1/communes/${zipcode}`,
-      {
-        headers: { Authorization: token }
-      }
-    )).listeCommunes
-  } catch (err) {
-    log('error', err.message)
-    throw new Error(errors.VENDOR_DOWN)
-  }
-
-  if (listeCommunes.length === 0) {
-    log('error', 'Zip code is not valid or does not exist')
-    throw new Error(errors.LOGIN_FAILED)
-  }
-
-  const codeOrga = listeCommunes[0].codeOrganisme
-
-  // Correspondences : caseCssClass / digit
-  const assocClassDigit = [
-    { digit: '0', class: 'case-xt' },
-    { digit: '1', class: 'case-xy' },
-    { digit: '2', class: 'case-xw' },
-    { digit: '3', class: 'case-xq' },
-    { digit: '4', class: 'case-xz' },
-    { digit: '5', class: 'case-xs' },
-    { digit: '6', class: 'case-xu' },
-    { digit: '7', class: 'case-xx' },
-    { digit: '8', class: 'case-xr' },
-    { digit: '9', class: 'case-xv' }
-  ]
-
-  log('debug', 'Getting clavier_virtuel')
-  // Retrieve correspondences : caseCssClass / letter
-  let assocClassLetter
-  try {
-    assocClassLetter = (await requestJSON(
-      `${baseUrl}/api/connexionmiddle/v1/clavier_virtuel?nb_cases=15`,
-      {
-        headers: {
-          Authorization: token
-        }
-      }
-    )).listeCase
-  } catch (err) {
-    log('error', err)
-    throw new Error(errors.VENDOR_DOWN)
-  }
-
-  // Parse password
-  const parsedPassword = parsePassword(
-    password,
-    assocClassLetter,
-    assocClassDigit
-  )
+  log('debug', 'Got JWT')
 
   log('debug', 'Launching POST')
+
   // Authentication with all fields
+
   await requestHTML(`${baseUrl}/wps/session/RefreshSession.jsp`)
+
   const authResp = await requestJSON({
-    url: `${baseUrl}/api/connexionmiddle/v1/verifier_mdp`,
+    url: `${baseUrl}/api/connexionmiddle/v3/connexion_personne`,
     gzip: true,
     headers: {
       Authorization: token
     },
     method: 'POST',
     json: {
-      codeOrga,
-      jourMoisNaissance: born,
-      matricule: login,
-      positions: parsedPassword,
-      modeAccessible: false,
-      origineDemande: 'WEB'
+      identifiant: login,
+      motDePasse: password,
+      origineDemande: 'WEB',
+      captcha: '',
+      contexteAppel: 'caffr'
     }
   })
 
   if (authResp.cguAValider === true) {
     throw new Error('USER_ACTION_NEEDED.CGU_FORM')
   }
+
+  // Get LtpaToken2 with ccode
+
+  let LtpaToken2 = await requestHTML(
+    `https://wwwd.caf.fr/wpc-connexionportail-web/s/AccesPortail?urlredirect=/wps/myportal/caffr/moncompte/tableaudebord&ccode=${authResp.ccode}`,
+    {
+      resolveWithFullResponse: true
+    }
+  )
+  LtpaToken2 = LtpaToken2.request.headers.cookie
+  // log('info', LtpaToken2)
 
   // Check if connected
   log('debug', 'Checking for login')
@@ -204,9 +188,8 @@ async function authenticate(login, zipcode, born, password) {
       resolveWithFullResponse: true
     }
   )
-
   if (
-    !response.request.uri.href.includes(
+    !response.request._rp_options.uri.includes(
       `${baseUrl}/wps/myportal/caffr/moncompte/tableaudebord`
     )
   ) {
@@ -218,137 +201,138 @@ async function authenticate(login, zipcode, born, password) {
   }
   await this.notifySuccessfulLogin()
 
-  return codeOrga
+  // Must return LtpaToken2 now
+  return LtpaToken2
 }
 
-async function parseDocuments(docs, token) {
-  let bills = []
-  for (var i = 0; i < docs.length; i++) {
-    const dateElab = parseDate(docs[i].dateElaboration)
-    const [yearElab, monthElab] = dateToYearMonth(dateElab)
-    // Get last day of the month for the request
-    const lastDayElab = daysInMonth(monthElab, yearElab)
+// async function parseDocuments(docs, token) {
+//   let bills = []
+//   for (var i = 0; i < docs.length; i++) {
+//     const dateElab = parseDate(docs[i].dateElaboration)
+//     const [yearElab, monthElab] = dateToYearMonth(dateElab)
+//     // Get last day of the month for the request
+//     const lastDayElab = daysInMonth(monthElab, yearElab)
 
-    const date = parseDate(docs[i].dateEmission)
-    const amount = parseAmount(docs[i].montantPaiement)
+//     const date = parseDate(docs[i].dateEmission)
+//     const amount = parseAmount(docs[i].montantPaiement)
 
-    // Create bill for paiement
-    bills.push({
-      date,
-      amount,
-      isRefund: true,
-      currency: '€',
-      requestOptions: {
-        // The PDF required an authorization
-        headers: {
-          Authorization: token
-        }
-      },
-      vendor: 'caf',
-      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
-      filename: `${formatShortDate(
-        dateElab
-      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
-      fileAttributes: {
-        metadata: {
-          carbonCopy: true
-        }
-      }
-    })
-  }
-  return bills
-}
+//     // Create bill for paiement
+//     bills.push({
+//       date,
+//       amount,
+//       isRefund: true,
+//       currency: '€',
+//       requestOptions: {
+//         // The PDF required an authorization
+//         headers: {
+//           Authorization: token
+//         }
+//       },
+//       vendor: 'caf',
+//       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
+//       filename: `${formatShortDate(
+//         dateElab
+//       )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
+//       fileAttributes: {
+//         metadata: {
+//           carbonCopy: true
+//         }
+//       }
+//     })
+//   }
+//   return bills
+// }
 
-async function parseAttestation(token) {
-  const today = Date.now()
-  const lastMonth = subMonths(today, 1)
-  const [year, month] = dateToYearMonth(lastMonth)
-  const lastDay = daysInMonth(month, year)
+// async function parseAttestation(token) {
+//   const today = Date.now()
+//   const lastMonth = subMonths(today, 1)
+//   const [year, month] = dateToYearMonth(lastMonth)
+//   const lastDay = daysInMonth(month, year)
 
-  // A array with one element
-  return [
-    {
-      shouldReplaceFile: () => true,
-      requestOptions: {
-        // The PDF required an authorization
-        headers: {
-          Authorization: token
-        }
-      },
-      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `caf_attestation_quotient_familial.pdf`,
-      fileAttributes: {
-        metadata: {
-          carbonCopy: true
-        }
-      }
-    }
-  ]
-}
+//   // A array with one element
+//   return [
+//     {
+//       shouldReplaceFile: () => true,
+//       requestOptions: {
+//         // The PDF required an authorization
+//         headers: {
+//           Authorization: token
+//         }
+//       },
+//       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
+//       filename: `caf_attestation_quotient_familial.pdf`,
+//       fileAttributes: {
+//         metadata: {
+//           carbonCopy: true
+//         }
+//       }
+//     }
+//   ]
+// }
 
-function parsePassword(password, assocClassLetter, assocClassDigit) {
-  var assocLetterDigit = []
-  for (var l = 0; l < assocClassLetter.length; l++) {
-    for (var d = 0; d < assocClassDigit.length; d++) {
-      if (assocClassDigit[d].class == assocClassLetter[l].classCss) {
-        assocLetterDigit.push({
-          letter: assocClassLetter[l].position,
-          digit: assocClassDigit[d].digit
-        })
-      }
-    }
-  }
+// function parsePassword(password, assocClassLetter, assocClassDigit) {
+//   var assocLetterDigit = []
+//   for (var l = 0; l < assocClassLetter.length; l++) {
+//     for (var d = 0; d < assocClassDigit.length; d++) {
+//       if (assocClassDigit[d].class == assocClassLetter[l].classCss) {
+//         assocLetterDigit.push({
+//           letter: assocClassLetter[l].position,
+//           digit: assocClassDigit[d].digit
+//         })
+//       }
+//     }
+//   }
 
-  let parsedPassword = ''
-  for (var c = 0; c < password.length; c++) {
-    for (var a = 0; a < assocLetterDigit.length; a++) {
-      if (password[c] == assocLetterDigit[a].digit) {
-        parsedPassword += assocLetterDigit[a].letter
-      }
-    }
-  }
+//   let parsedPassword = ''
+//   for (var c = 0; c < password.length; c++) {
+//     for (var a = 0; a < assocLetterDigit.length; a++) {
+//       if (password[c] == assocLetterDigit[a].digit) {
+//         parsedPassword += assocLetterDigit[a].letter
+//       }
+//     }
+//   }
 
-  return parsedPassword
-}
+//   return parsedPassword
+// }
 
 // Convert a Date object to a ISO date string
-function formatShortDate(date) {
-  let year = date.getFullYear()
-  let month = date.getMonth() + 1
-  if (month < 10) {
-    month = '0' + month
-  }
-  return `${year}-${month}`
-}
+// function formatShortDate(date) {
+//   let year = date.getFullYear()
+//   let month = date.getMonth() + 1
+//   if (month < 10) {
+//     month = '0' + month
+//   }
+//   return `${year}-${month}`
+// }
 
 // Convert a date from format Ymmdd  to Date object
-function parseDate(text) {
-  const y = text.substr(0, 4)
-  const m = parseInt(text.substr(4, 2), 10)
-  const d = parseInt(text.substr(6, 2), 10)
-  return new Date(y, m - 1, d)
-}
+// function parseDate(text) {
+//   const y = text.substr(0, 4)
+//   const m = parseInt(text.substr(4, 2), 10)
+//   const d = parseInt(text.substr(6, 2), 10)
+//   return new Date(y, m - 1, d)
+// }
 
 // Convert date object to Ymm
-function dateToYearMonth(date) {
-  let month = date.getMonth() + 1
-  if (month < 10) {
-    month = '0' + month
-  }
-  const year = date.getFullYear()
+// function dateToYearMonth(date) {
+//   let month = date.getMonth() + 1
+//   if (month < 10) {
+//     month = '0' + month
+//   }
+//   const year = date.getFullYear()
 
-  return [year, month]
-}
+//   return [year, month]
+// }
 
-function parseAmount(amount) {
-  return parseFloat(amount.replace(',', '.'))
-}
+// function parseAmount(amount) {
+//   return parseFloat(amount.replace(',', '.'))
+// }
 
 // Return number of days in the month
 // Month arg is natural month number here (1-indexed) and Date arg is 0-indexed
-function daysInMonth(month, year) {
-  return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
-}
+// function daysInMonth(month, year) {
+//   return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
+// }
 
 function normalizeLogin(login) {
   if (login && login.length < 7 && login.padStart) {
