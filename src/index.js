@@ -10,7 +10,7 @@ const {
   retry
 } = require('cozy-konnector-libs')
 const requestHTML = requestFactory({
-  debug: true,
+  debug: false,
   cheerio: true,
   json: false,
   jar: true
@@ -23,7 +23,7 @@ const requestJSON = requestFactory({
 })
 
 const baseUrl = 'https://wwwd.caf.fr'
-// const lastDayOfMonth = require('date-fns').lastDayOfMonth
+const lastDayOfMonth = require('date-fns').lastDayOfMonth
 // const subMonths = require('date-fns').subMonths
 
 module.exports = new BaseKonnector(start)
@@ -49,7 +49,7 @@ async function start(fields) {
     }
   }
   log('info', 'Successfully logged in')
-  log('info', `LtpaToken => ${LtpaToken2}`)
+  log('info', LtpaToken2)
 
   log('info', 'Fetching the list of documents')
 
@@ -64,47 +64,36 @@ async function start(fields) {
   })
 
   const parsedCnafToken = JSON.parse(token.req.res.body)
-  const cnafToken = parsedCnafToken.cnafTokenJwt
+  let cnafToken = parsedCnafToken.cnafTokenJwt
 
   // log('info', cnafToken)
 
-  // await requestJSON(`${baseUrl}/api/statistiquesfront/v1/sid`, {
-  //   headers: {
-  //     Authorization: `${cnafToken}`
-  //   },
-  //   body: {
-  //     composant: 'AttestationsAppli',
-  //     parametres: '',
-  //     portailVirtuel: 'caffr',
-  //     rubrique: 'DOSWEB',
-  //     sousRubrique: 'DOSATTVISUWEB'
-  //   },
-  //   method: 'POST'
-  // })
   const paiements = await requestJSON(
-    `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/20191201/20211130`,
+    `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements`,
     {
       headers: {
         Authorization: `${cnafToken}`
       },
+      method: 'GET',
       resolveWithFullResponse: true
     }
   )
 
-  log('info', paiements)
+  log('info', paiements.body)
 
-  // log('info', 'Parsing bills')
-  // const bills = await parseDocuments(paiements, token)
-
+  log('info', 'Parsing bills')
+  const bills = await parseDocuments(paiements.body.paiements, token)
+  log('info', bills)
   // log('info', 'Parsing attestation')
   // const files = await parseAttestation(token)
 
-  // log('info', 'Saving data to Cozy')
-  // await this.saveBills(bills, fields, {
-  //   contentType: 'application/pdf',
-  //   linkBankOperations: false,
-  //   fileIdAttributes: ['date', 'amount']
-  // })
+  log('info', 'Saving data to Cozy')
+  await this.saveBills(bills, fields, {
+    contentType: 'application/pdf',
+    linkBankOperations: false,
+    fileIdAttributes: ['date', 'amount']
+  })
+
   // // Only one attestation send, replaced each time
   // await this.saveFiles(files, fields, {
   //   fileIdAttributes: ['filename']
@@ -205,43 +194,43 @@ async function authenticate(login, zipcode, born, password) {
   return LtpaToken2
 }
 
-// async function parseDocuments(docs, token) {
-//   let bills = []
-//   for (var i = 0; i < docs.length; i++) {
-//     const dateElab = parseDate(docs[i].dateElaboration)
-//     const [yearElab, monthElab] = dateToYearMonth(dateElab)
-//     // Get last day of the month for the request
-//     const lastDayElab = daysInMonth(monthElab, yearElab)
+async function parseDocuments(docs, token) {
+  let bills = []
+  for (var i = 0; i < docs.length; i++) {
+    const dateElab = parseDate(docs[i].dateElaboration)
+    const [yearElab, monthElab] = dateToYearMonth(dateElab)
+    // Get last day of the month for the request
+    const lastDayElab = daysInMonth(monthElab, yearElab)
 
-//     const date = parseDate(docs[i].dateEmission)
-//     const amount = parseAmount(docs[i].montantPaiement)
+    const date = parseDate(docs[i].dateEmission)
+    const amount = parseAmount(docs[i].montantPaiement)
 
-//     // Create bill for paiement
-//     bills.push({
-//       date,
-//       amount,
-//       isRefund: true,
-//       currency: '€',
-//       requestOptions: {
-//         // The PDF required an authorization
-//         headers: {
-//           Authorization: token
-//         }
-//       },
-//       vendor: 'caf',
-//       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
-//       filename: `${formatShortDate(
-//         dateElab
-//       )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
-//       fileAttributes: {
-//         metadata: {
-//           carbonCopy: true
-//         }
-//       }
-//     })
-//   }
-//   return bills
-// }
+    // Create bill for paiement
+    bills.push({
+      date,
+      amount,
+      isRefund: true,
+      currency: '€',
+      requestOptions: {
+        // The PDF required an authorization
+        headers: {
+          Authorization: token
+        }
+      },
+      vendor: 'caf',
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/paiements/${yearElab}${monthElab}01/${yearElab}${monthElab}${lastDayElab}`,
+      filename: `${formatShortDate(
+        dateElab
+      )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
+      fileAttributes: {
+        metadata: {
+          carbonCopy: true
+        }
+      }
+    })
+  }
+  return bills
+}
 
 // async function parseAttestation(token) {
 //   const today = Date.now()
@@ -296,43 +285,43 @@ async function authenticate(login, zipcode, born, password) {
 // }
 
 // Convert a Date object to a ISO date string
-// function formatShortDate(date) {
-//   let year = date.getFullYear()
-//   let month = date.getMonth() + 1
-//   if (month < 10) {
-//     month = '0' + month
-//   }
-//   return `${year}-${month}`
-// }
+function formatShortDate(date) {
+  let year = date.getFullYear()
+  let month = date.getMonth() + 1
+  if (month < 10) {
+    month = '0' + month
+  }
+  return `${year}-${month}`
+}
 
 // Convert a date from format Ymmdd  to Date object
-// function parseDate(text) {
-//   const y = text.substr(0, 4)
-//   const m = parseInt(text.substr(4, 2), 10)
-//   const d = parseInt(text.substr(6, 2), 10)
-//   return new Date(y, m - 1, d)
-// }
+function parseDate(text) {
+  const y = text.substr(0, 4)
+  const m = parseInt(text.substr(4, 2), 10)
+  const d = parseInt(text.substr(6, 2), 10)
+  return new Date(y, m - 1, d)
+}
 
 // Convert date object to Ymm
-// function dateToYearMonth(date) {
-//   let month = date.getMonth() + 1
-//   if (month < 10) {
-//     month = '0' + month
-//   }
-//   const year = date.getFullYear()
+function dateToYearMonth(date) {
+  let month = date.getMonth() + 1
+  if (month < 10) {
+    month = '0' + month
+  }
+  const year = date.getFullYear()
 
-//   return [year, month]
-// }
+  return [year, month]
+}
 
-// function parseAmount(amount) {
-//   return parseFloat(amount.replace(',', '.'))
-// }
+function parseAmount(amount) {
+  return parseFloat(amount.replace(',', '.'))
+}
 
 // Return number of days in the month
 // Month arg is natural month number here (1-indexed) and Date arg is 0-indexed
-// function daysInMonth(month, year) {
-//   return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
-// }
+function daysInMonth(month, year) {
+  return lastDayOfMonth(new Date(year, month - 1, 1)).getDate()
+}
 
 function normalizeLogin(login) {
   if (login && login.length < 7 && login.padStart) {
