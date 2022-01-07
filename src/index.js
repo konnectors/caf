@@ -16,7 +16,7 @@ const requestHTML = requestFactory({
   jar: true
 })
 const requestJSON = requestFactory({
-  debug: true,
+  debug: false,
   cheerio: false,
   json: true,
   jar: true
@@ -49,7 +49,6 @@ async function start(fields) {
     }
   }
   log('info', 'Successfully logged in')
-  log('info', LtpaToken2)
 
   log('info', 'Fetching the list of documents')
 
@@ -79,11 +78,11 @@ async function start(fields) {
     }
   )
 
-  log('info', paiements.body)
+  // log('info', paiements.body)
 
   log('info', 'Parsing bills')
   const bills = await parseDocuments(paiements.body.paiements, token)
-  log('info', bills)
+
   // log('info', 'Parsing attestation')
   // const files = await parseAttestation(token)
 
@@ -194,7 +193,27 @@ async function authenticate(login, zipcode, born, password) {
   return LtpaToken2
 }
 
-async function parseDocuments(docs, token) {
+async function parseDocuments(docs) {
+  const test1 = await requestHTML(
+    `${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`,
+    {
+      resolveWithFullResponse: true
+    }
+  )
+  const test2 = test1.request.responseContent.body
+  const bearerString = test2.match(
+    // eslint-disable-next-line no-useless-escape
+    /CnafUserService.setTokenJWT\(\"Bearer\s([a-zA-Z0-9\._-]+)\"\)\;/g
+  )
+  const tokenArray = bearerString[0].split('(')
+  const stringedToken = tokenArray[1]
+    .replace(/"/g, '')
+    .replace(')', '')
+    .replace(';', '')
+  const tokenObj = {
+    token: stringedToken
+  }
+  log('info', tokenObj)
   let bills = []
   for (var i = 0; i < docs.length; i++) {
     const dateElab = parseDate(docs[i].dateElaboration)
@@ -209,12 +228,12 @@ async function parseDocuments(docs, token) {
     bills.push({
       date,
       amount,
-      isRefund: true,
+      isRefund: false,
       currency: '€',
       requestOptions: {
         // The PDF required an authorization
         headers: {
-          Authorization: token
+          Authorization: tokenObj.token
         }
       },
       vendor: 'caf',
@@ -229,6 +248,7 @@ async function parseDocuments(docs, token) {
       }
     })
   }
+  // log('info', bills)
   return bills
 }
 
