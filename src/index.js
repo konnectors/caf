@@ -1,14 +1,20 @@
 process.env.SENTRY_DSN =
   process.env.SENTRY_DSN ||
-  'https://634828219d7842f4b9574a85f6f63f76@sentry.cozycloud.cc/120'
+  'https://022abee095bc40ea928c610cf0bdbe8d@errors.cozycloud.cc/21'
 
 const {
   BaseKonnector,
   requestFactory,
   errors,
   log,
-  retry
+  retry,
+  utils,
+  cozyClient
 } = require('cozy-konnector-libs')
+
+const models = cozyClient.new.models
+const { Qualification } = models.document
+
 const requestHTML = requestFactory({
   debug: false,
   cheerio: true,
@@ -24,7 +30,7 @@ const requestJSON = requestFactory({
 
 const baseUrl = 'https://wwwd.caf.fr'
 const lastDayOfMonth = require('date-fns').lastDayOfMonth
-// const subMonths = require('date-fns').subMonths
+const subMonths = require('date-fns').subMonths
 
 module.exports = new BaseKonnector(start)
 
@@ -38,7 +44,7 @@ async function start(fields) {
       backoff: 3,
       throw_original: true,
       context: this,
-      args: [fields.login, fields.zipcode, fields.born, fields.password]
+      args: [fields.login, fields.password]
     })
   } catch (e) {
     if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
@@ -65,8 +71,6 @@ async function start(fields) {
   const parsedCnafToken = JSON.parse(token.req.res.body)
   let cnafToken = parsedCnafToken.cnafTokenJwt
 
-  // log('info', cnafToken)
-
   const paiements = await requestJSON(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements`,
     {
@@ -78,13 +82,11 @@ async function start(fields) {
     }
   )
 
-  // log('info', paiements.body)
-
   log('info', 'Parsing bills')
   const bills = await parseDocuments(paiements.body.paiements, token)
 
-  // log('info', 'Parsing attestation')
-  // const files = await parseAttestation(token)
+  log('info', 'Parsing attestation')
+  const files = await parseAttestation()
 
   log('info', 'Saving data to Cozy')
   await this.saveBills(bills, fields, {
@@ -93,23 +95,14 @@ async function start(fields) {
     fileIdAttributes: ['date', 'amount']
   })
 
-  // // Only one attestation send, replaced each time
-  // await this.saveFiles(files, fields, {
-  //   fileIdAttributes: ['filename']
-  // })
+  // Only one attestation send, replaced each time
+  await this.saveFiles(files, fields, {
+    fileIdAttributes: ['filename']
+  })
 }
 
-async function authenticate(login, zipcode, born, password) {
-  if (
-    login == '' ||
-    login == null ||
-    zipcode == '' ||
-    zipcode == null ||
-    born == '' ||
-    born == null ||
-    password == '' ||
-    password == null
-  ) {
+async function authenticate(login, password) {
+  if (login == '' || login == null || password == '' || password == null) {
     log('error', 'Some fields are not defined')
     throw new Error(errors.LOGIN_FAILED)
   }
@@ -194,14 +187,14 @@ async function authenticate(login, zipcode, born, password) {
 }
 
 async function parseDocuments(docs) {
-  const test1 = await requestHTML(
+  const resp = await requestHTML(
     `${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`,
     {
       resolveWithFullResponse: true
     }
   )
-  const test2 = test1.request.responseContent.body
-  const bearerString = test2.match(
+  const responseBody = resp.request.responseContent.body
+  const bearerString = responseBody.match(
     // eslint-disable-next-line no-useless-escape
     /CnafUserService.setTokenJWT\(\"Bearer\s([a-zA-Z0-9\._-]+)\"\)\;/g
   )
@@ -213,7 +206,7 @@ async function parseDocuments(docs) {
   const tokenObj = {
     token: stringedToken
   }
-  log('info', tokenObj)
+
   let bills = []
   for (var i = 0; i < docs.length; i++) {
     const dateElab = parseDate(docs[i].dateElaboration)
@@ -243,66 +236,69 @@ async function parseDocuments(docs) {
       )}_caf_attestation_paiement_${amount.toFixed(2)}€.pdf`,
       fileAttributes: {
         metadata: {
-          carbonCopy: true
+          contentAuthor: 'caf.fr',
+          issueDate: utils.formatDate(new Date()),
+          datetimeLabel: 'issuDate',
+          isSubscription: false,
+          carbonCopy: true,
+          qualification: Qualification.getByLabel('caf')
         }
       }
     })
   }
-  // log('info', bills)
   return bills
 }
 
-// async function parseAttestation(token) {
-//   const today = Date.now()
-//   const lastMonth = subMonths(today, 1)
-//   const [year, month] = dateToYearMonth(lastMonth)
-//   const lastDay = daysInMonth(month, year)
+async function parseAttestation() {
+  const resp = await requestHTML(
+    `${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`,
+    {
+      resolveWithFullResponse: true
+    }
+  )
+  const responseBody = resp.request.responseContent.body
+  const bearerString = responseBody.match(
+    // eslint-disable-next-line no-useless-escape
+    /CnafUserService.setTokenJWT\(\"Bearer\s([a-zA-Z0-9\._-]+)\"\)\;/g
+  )
+  const tokenArray = bearerString[0].split('(')
+  const stringedToken = tokenArray[1]
+    .replace(/"/g, '')
+    .replace(')', '')
+    .replace(';', '')
+  const tokenObj = {
+    token: stringedToken
+  }
+  const today = Date.now()
+  const lastMonth = subMonths(today, 1)
+  const [year, month] = dateToYearMonth(lastMonth)
+  const lastDay = daysInMonth(month, year)
 
-//   // A array with one element
-//   return [
-//     {
-//       shouldReplaceFile: () => true,
-//       requestOptions: {
-//         // The PDF required an authorization
-//         headers: {
-//           Authorization: token
-//         }
-//       },
-//       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-//       filename: `caf_attestation_quotient_familial.pdf`,
-//       fileAttributes: {
-//         metadata: {
-//           carbonCopy: true
-//         }
-//       }
-//     }
-//   ]
-// }
-
-// function parsePassword(password, assocClassLetter, assocClassDigit) {
-//   var assocLetterDigit = []
-//   for (var l = 0; l < assocClassLetter.length; l++) {
-//     for (var d = 0; d < assocClassDigit.length; d++) {
-//       if (assocClassDigit[d].class == assocClassLetter[l].classCss) {
-//         assocLetterDigit.push({
-//           letter: assocClassLetter[l].position,
-//           digit: assocClassDigit[d].digit
-//         })
-//       }
-//     }
-//   }
-
-//   let parsedPassword = ''
-//   for (var c = 0; c < password.length; c++) {
-//     for (var a = 0; a < assocLetterDigit.length; a++) {
-//       if (password[c] == assocLetterDigit[a].digit) {
-//         parsedPassword += assocLetterDigit[a].letter
-//       }
-//     }
-//   }
-
-//   return parsedPassword
-// }
+  // A array with one element
+  return [
+    {
+      shouldReplaceFile: () => true,
+      requestOptions: {
+        // The PDF required an authorization
+        headers: {
+          Authorization: tokenObj.token
+        }
+      },
+      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
+      filename: `caf_attestation_quotient_familial.pdf`,
+      fileAttributes: {
+        metadata: {
+          contentAuthor: 'caf.fr',
+          issueDate: utils.formatDate(new Date()),
+          datetimeLabel: 'issuDate',
+          isSubscription: false,
+          carbonCopy: true,
+          qualification: Qualification.getByLabel('caf')
+        }
+      }
+    }
+  ]
+}
 
 // Convert a Date object to a ISO date string
 function formatShortDate(date) {
