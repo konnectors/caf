@@ -159,7 +159,6 @@ async function authenticate(login, password) {
     }
   )
   LtpaToken2 = LtpaToken2.request.headers.cookie
-  // log('info', LtpaToken2)
 
   // Check if connected
   log('debug', 'Checking for login')
@@ -221,7 +220,7 @@ async function parseDocuments(docs) {
     bills.push({
       date,
       amount,
-      isRefund: false,
+      isRefund: true,
       currency: '€',
       requestOptions: {
         // The PDF required an authorization
@@ -241,7 +240,9 @@ async function parseDocuments(docs) {
           datetimeLabel: 'issuDate',
           isSubscription: false,
           carbonCopy: true,
-          qualification: Qualification.getByLabel('caf')
+          qualification: Qualification.getByLabel(
+            'payment_proof_family_allowance'
+          )
         }
       }
     })
