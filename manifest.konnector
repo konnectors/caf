@@ -72,13 +72,6 @@
   "locales": {
     "fr": {
       "fields": {
-        "zipcode": {
-          "label": "Code postal"
-        },
-        "born": {
-          "label": "Jour et mois de naissance",
-          "placeholder": "JJMM"
-        },
         "login": {
           "label": "Numéro d'allocataire"
         }
@@ -105,10 +98,6 @@
     },
     "en": {
       "fields": {
-        "born": {
-          "label": "Day and Month of birth",
-          "placeholder": "DDMM"
-        },
         "login": {
           "label": "beneficiary number"
         }
@@ -134,10 +123,15 @@
       }
     }
   },
+  "qualification_labels":[
+    "caf"
+  ],
   "features": [
     "LOGIN_OK",
     "METADATA_DEDUP",
-    "CARBON_COPY"
+    "CARBON_COPY",
+    "DOC_QUALIFICATION_V2",
+    "SENTRY_V2"
   ],
   "banksTransactionRegExp": "\\bcaf\\b",
   "manifest_version": "2"
