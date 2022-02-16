@@ -16,16 +16,6 @@
       "type": "text",
       "max": 7
     },
-    "zipcode": {
-      "type": "text",
-      "min": 5,
-      "max": 5
-    },
-    "born": {
-      "type": "text",
-      "min": 4,
-      "max": 4
-    },
     "password": {
       "type": "password"
     },
