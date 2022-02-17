@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.10.0",
   "name": "CAF",
   "type": "konnector",
   "language": "node",
@@ -15,16 +15,6 @@
     "login": {
       "type": "text",
       "max": 7
-    },
-    "zipcode": {
-      "type": "text",
-      "min": 5,
-      "max": 5
-    },
-    "born": {
-      "type": "text",
-      "min": 4,
-      "max": 4
     },
     "password": {
       "type": "password"
@@ -73,7 +63,7 @@
     "fr": {
       "fields": {
         "login": {
-          "label": "Numéro d'allocataire"
+          "label": "Numéro de Sécurité Sociale (13 chiffres)"
         }
       },
       "short_description": "Récupère vos documents CAF",
@@ -99,7 +89,7 @@
     "en": {
       "fields": {
         "login": {
-          "label": "beneficiary number"
+          "label": "Social Security number (13 digits)"
         }
       },
       "short_description": "Fetch your documents from the CAF website",
@@ -123,7 +113,7 @@
       }
     }
   },
-  "qualification_labels": [
+  "qualification_labels":[
     "caf"
   ],
   "features": [
