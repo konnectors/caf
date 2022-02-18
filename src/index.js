@@ -16,13 +16,13 @@ const models = cozyClient.new.models
 const { Qualification } = models.document
 
 const requestHTML = requestFactory({
-  debug: false,
+  // debug: true,
   cheerio: true,
   json: false,
   jar: true
 })
 const requestJSON = requestFactory({
-  debug: false,
+  // debug: true,
   cheerio: false,
   json: true,
   jar: true
@@ -58,35 +58,33 @@ async function start(fields) {
 
   log('info', 'Fetching the list of documents')
 
-  const token = await requestHTML({
+  const token = await requestJSON({
     url: `${baseUrl}/wps/s/GenerateTokenJwt/`,
-    gzip: true,
     headers: {
       Cookie: `${LtpaToken2}`
     },
-    method: 'GET',
-    resolveWithFullResponse: true
+    method: 'GET'
   })
 
-  const parsedCnafToken = JSON.parse(token.req.res.body)
+  const parsedCnafToken = token
   let cnafToken = parsedCnafToken.cnafTokenJwt
 
-  const paiements = await requestJSON(
+  const getPaiements = await requestJSON(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements`,
     {
       headers: {
         Authorization: `${cnafToken}`
       },
-      method: 'GET',
-      resolveWithFullResponse: true
+      method: 'GET'
     }
   )
+  const paiements = getPaiements.paiements
 
   log('info', 'Parsing bills')
-  const bills = await parseDocuments(paiements.body.paiements, token)
+  const bills = await parseDocuments(paiements, token)
 
   log('info', 'Parsing attestation')
-  const files = await parseAttestation()
+  const files = await parseAttestation(token)
 
   log('info', 'Saving data to Cozy')
   await this.saveBills(bills, fields, {
@@ -181,30 +179,17 @@ async function authenticate(login, password) {
   }
   await this.notifySuccessfulLogin()
 
-  // Must return LtpaToken2 now
-  return LtpaToken2
+  // Must return LtpaToken2 now with CnafTokenJWT
+  return LtpaToken2, token
 }
 
-async function parseDocuments(docs) {
-  const resp = await requestHTML(
-    `${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`,
-    {
-      resolveWithFullResponse: true
-    }
-  )
-  const responseBody = resp.request.responseContent.body
-  const bearerString = responseBody.match(
-    // eslint-disable-next-line no-useless-escape
-    /CnafUserService.setTokenJWT\(\"Bearer\s([a-zA-Z0-9\._-]+)\"\)\;/g
-  )
-  const tokenArray = bearerString[0].split('(')
-  const stringedToken = tokenArray[1]
-    .replace(/"/g, '')
-    .replace(')', '')
-    .replace(';', '')
-  const tokenObj = {
-    token: stringedToken
-  }
+async function parseDocuments(docs, token) {
+  await requestHTML(`${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`, {
+    headers: {
+      Authorization: token
+    },
+    resolveWithFullResponse: true
+  })
 
   let bills = []
   for (var i = 0; i < docs.length; i++) {
@@ -225,7 +210,7 @@ async function parseDocuments(docs) {
       requestOptions: {
         // The PDF required an authorization
         headers: {
-          Authorization: tokenObj.token
+          Authorization: token.cnafTokenJwt
         }
       },
       vendor: 'caf',
@@ -250,26 +235,10 @@ async function parseDocuments(docs) {
   return bills
 }
 
-async function parseAttestation() {
-  const resp = await requestHTML(
-    `${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`,
-    {
-      resolveWithFullResponse: true
-    }
-  )
-  const responseBody = resp.request.responseContent.body
-  const bearerString = responseBody.match(
-    // eslint-disable-next-line no-useless-escape
-    /CnafUserService.setTokenJWT\(\"Bearer\s([a-zA-Z0-9\._-]+)\"\)\;/g
-  )
-  const tokenArray = bearerString[0].split('(')
-  const stringedToken = tokenArray[1]
-    .replace(/"/g, '')
-    .replace(')', '')
-    .replace(';', '')
-  const tokenObj = {
-    token: stringedToken
-  }
+async function parseAttestation(token) {
+  await requestHTML(`${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`, {
+    resolveWithFullResponse: true
+  })
   const today = Date.now()
   const lastMonth = subMonths(today, 1)
   const [year, month] = dateToYearMonth(lastMonth)
@@ -282,7 +251,7 @@ async function parseAttestation() {
       requestOptions: {
         // The PDF required an authorization
         headers: {
-          Authorization: tokenObj.token
+          Authorization: token.cnafTokenJwt
         }
       },
       fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
