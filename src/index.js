@@ -49,6 +49,17 @@ async function start(fields) {
   } catch (e) {
     if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
       throw e
+    } else if (e.statusCode === 400) {
+      if (fields.login.length < 13) {
+        log('error', 'Your login must be 13 characters')
+        throw new Error(errors.LOGIN_FAILED)
+      } else {
+        log('error', 'something went wrong with your credentials')
+        throw new Error(errors.LOGIN_FAILED)
+      }
+    } else if (e.statusCode === 403) {
+      log('error', 'something went wrong with your credentials')
+      throw new Error(errors.LOGIN_FAILED)
     } else {
       log('error', e.message)
       throw new Error(errors.VENDOR_DOWN)
