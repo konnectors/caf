@@ -50,7 +50,7 @@ async function start(fields) {
     if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
       throw e
     } else if (e.statusCode === 400) {
-      if (fields.login.length < 13) {
+      if (fields.login.length < 13 || fields.login.length > 13) {
         log('error', 'Your login must be 13 characters')
         throw new Error(errors.LOGIN_FAILED)
       } else {
