@@ -64,8 +64,7 @@
       "fields": {
         "login": {
           "label": "Numéro de Sécurité Sociale (13 chiffres)",
-          "min": 13,
-          "max": 13
+          "pattern": "/([0-9]{5})([0-9]{2}|[0-9A-B]{2})([0-9]{6})/g"
         }
       },
       "short_description": "Récupère vos documents CAF",
