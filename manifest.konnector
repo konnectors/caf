@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.12.0",
   "name": "CAF",
   "type": "konnector",
   "language": "node",
@@ -14,7 +14,8 @@
   "fields": {
     "login": {
       "type": "text",
-      "max": 7
+      "min": 13,
+      "max": 13
     },
     "password": {
       "type": "password"
@@ -64,7 +65,8 @@
       "fields": {
         "login": {
           "label": "Numéro de Sécurité Sociale (13 chiffres)",
-          "pattern": "/([0-9]{5})([0-9]{2}|[0-9A-B]{2})([0-9]{6})/g"
+          "min": 13,
+          "max": 13
         }
       },
       "short_description": "Récupère vos documents CAF",
