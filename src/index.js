@@ -323,9 +323,15 @@ function daysInMonth(month, year) {
 }
 
 function normalizeLogin(login) {
-  if (login && login.length < 7 && login.padStart) {
-    log('info', 'Had to normalize login length to 7 chars')
-    return login.padStart(7, '0')
+  log('debug', 'normalizeLogin start')
+  if (login && login.length > 13) {
+    log('info', 'Had to normalize login length to 13 chars')
+    const normalizedLogin = login.replace(/\s/g, '').slice(0, 13)
+    return normalizedLogin
+  }
+  if (login && login.length < 13) {
+    log('info', 'Login length is under 13 characters')
+    throw new Error(errors.LOGIN_FAILED)
   }
 
   return login
