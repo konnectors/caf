@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.12.0",
   "name": "CAF",
   "type": "konnector",
   "language": "node",
@@ -14,17 +14,8 @@
   "fields": {
     "login": {
       "type": "text",
-      "max": 7
-    },
-    "zipcode": {
-      "type": "text",
-      "min": 5,
-      "max": 5
-    },
-    "born": {
-      "type": "text",
-      "min": 4,
-      "max": 4
+      "min": 13,
+      "max": 13
     },
     "password": {
       "type": "password"
@@ -54,6 +45,9 @@
     "files": {
       "type": "io.cozy.files"
     },
+    "carbon_copy": {
+      "type": "io.cozy.certified.carbon_copy"
+    },
     "accounts": {
       "type": "io.cozy.accounts"
     }
@@ -69,20 +63,18 @@
   "locales": {
     "fr": {
       "fields": {
-        "zipcode": {
-          "label": "Code postal"
-        },
-        "born": {
-          "label": "Jour et mois de naissance",
-          "placeholder": "JJMM"
-        },
         "login": {
-          "label": "Numéro d'allocataire"
+          "label": "Numéro de Sécurité Sociale (13 chiffres)",
+          "min": 13,
+          "max": 13
         }
       },
       "short_description": "Récupère vos documents CAF",
       "long_description": "CAF est votre service d'allocations familiales disponible sur [https://www.caf.fr](www.caf.fr).\n\n**Connectez votre compte CAF à votre Cozy pour**\n\n- récupérer vos attestations de paiement\n- importer la dernière attestation de quotient familial\n\n**Accédez directement à vos documents dans votre Drive personnel**\n\nEn connectant votre compte CAF, votre Cozy crée automatiquement un dossier dans **Drive > Administratif > CAF**. Vos documents CAF sont à portée de main et toujours accessibles !\n\n**Suivez le montant de vos prestations avec Banks**\n\nLes attestations récupérées sont automatiquement liées aux opérations bancaires CAF associées à votre compte si vous utilisez l’application  Banks. \n\n**Configuration**\n\nPour connecter votre compte, il vous suffit de renseigner dans les champs : \n- votre numéro allocataire\n- votre code postal\n- votre date de naissance\n- votre mot de passe créé pour accéder au site www.caf.fr\n\nUne fois connecté, votre Cozy se connectera régulièrement à votre compte CAF pour récupérer les nouveaux éléments et les historiser dans un dossier CAF dans Drive.\n\nSi vous déconnectez votre compte CAF, les informations déjà sauvegardées dans votre Cozy restent disponibles. Vous pouvez les supprimer manuellement par ailleurs.",
       "permissions": {
+        "carboncopy": {
+          "description": "Utilisé pour certifier que vos fichiers sont copie conforme avec les documents d'origine"
+        },
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
         },
@@ -99,12 +91,8 @@
     },
     "en": {
       "fields": {
-        "born": {
-          "label": "Day and Month of birth",
-          "placeholder": "DDMM"
-        },
         "login": {
-          "label": "beneficiary number"
+          "label": "Social Security number (13 digits)"
         }
       },
       "short_description": "Fetch your documents from the CAF website",
@@ -112,6 +100,9 @@
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
+        },
+        "carboncopy": {
+          "description": "Required for carbon copy documents"
         },
         "bills": {
           "description": "Required to save the bills data"
@@ -125,6 +116,16 @@
       }
     }
   },
+  "qualification_labels": [
+    "caf"
+  ],
+  "features": [
+    "LOGIN_OK",
+    "METADATA_DEDUP",
+    "CARBON_COPY",
+    "DOC_QUALIFICATION_V2",
+    "SENTRY_V2"
+  ],
   "banksTransactionRegExp": "\\bcaf\\b",
   "manifest_version": "2"
 }
