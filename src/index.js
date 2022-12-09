@@ -156,9 +156,10 @@ async function authenticate(login, password) {
       contexteAppel: 'caffr'
     }
   })
-
-  if (authResp.cguAValider === true) {
-    throw new Error('USER_ACTION_NEEDED.CGU_FORM')
+  for (const etape of authResp.etapesConnexion) {
+    if (etape.nom === 'CGU' && etape.obligatoire === true) {
+      throw new Error('USER_ACTION_NEEDED.CGU_FORM')
+    }
   }
 
   // Get LtpaToken2 with ccode
