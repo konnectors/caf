@@ -29,6 +29,7 @@ const requestJSON = requestFactory({
 })
 
 const baseUrl = 'https://wwwd.caf.fr'
+let cnafUserId
 const lastDayOfMonth = require('date-fns').lastDayOfMonth
 const subMonths = require('date-fns').subMonths
 
@@ -105,11 +106,12 @@ async function start(fields) {
     linkBankOperations: false,
     fileIdAttributes: ['date', 'amount']
   })
-
   // Only one attestation send, replaced each time
   await this.saveFiles(files, fields, {
     fileIdAttributes: ['filename']
   })
+  const identity = await fetchIdentity(cnafToken)
+  await this.saveIdentity(identity, fields.login)
 }
 
 async function authenticate(login, password) {
@@ -170,6 +172,7 @@ async function authenticate(login, password) {
       resolveWithFullResponse: true
     }
   )
+  cnafUserId = LtpaToken2.body.html().match(/var userid = "([0-9-]*)";/)[1]
   LtpaToken2 = LtpaToken2.request.headers.cookie
 
   // Check if connected
@@ -282,6 +285,122 @@ async function parseAttestation(token) {
       }
     }
   ]
+}
+
+async function fetchIdentity(token) {
+  // We need both request, as the numberOfDependants value is not present in the first response
+  const getFullProfil = await requestJSON(
+    `${baseUrl}/api/profilcompletfront/v1/profilcalp`,
+    {
+      headers: {
+        Authorization: token
+      },
+      method: 'GET'
+    }
+  )
+  const getPartialProfil = await requestJSON(
+    `${baseUrl}/api/profilreduitfront/v1/mon_compte/profil_reduit`,
+    {
+      headers: {
+        Authorization: token
+      },
+      method: 'GET'
+    }
+  )
+  const result = { contact: {} }
+
+  result.contact.maritalStatus = findMaritalStatus(
+    getFullProfil.sitfam.libSitFam
+  )
+  result.contact.numberOfDependants = findNumberOfDependants(getPartialProfil)
+  result.contact.address = findAddressInfos(getFullProfil.adresse)
+  result.contact.email = getFullProfil.utilisateur.coordonneesContact.mail
+  result.contact.phone = findPhoneNumbers(
+    getFullProfil.utilisateur.coordonneesContact
+  )
+  result.contact.civility = getFullProfil.utilisateur.civ
+  result.contact.cnafFileNumber = cnafUserId.split('-')[1]
+
+  return result
+}
+
+function findMaritalStatus(receivedStatus) {
+  // We don't dispose of every status for the moment, it will be filled up by the time
+  if (receivedStatus.match(/concubinage/)) {
+    return 'single'
+  }
+  if (receivedStatus.match(/mariée? depuis le/)) {
+    return 'married'
+  }
+  if (receivedStatus.match(/pacsée? depuis le/)) {
+    return 'pacs'
+  } else {
+    log('warn', 'The received marital status is not known')
+    return undefined
+  }
+}
+
+function findNumberOfDependants(profil) {
+  let numberOfDependants = 0
+  if (profil.libEnfants === '') {
+    return numberOfDependants
+  } else {
+    numberOfDependants = profil.libEnfants.match(
+      /J'ai ([0-9]{1,2}) enfants?./
+    )[1]
+  }
+
+  return numberOfDependants
+}
+
+function findAddressInfos(profil) {
+  let foundAddress = ''
+  if (profil.complementAdresse2 != '') {
+    foundAddress = `${profil.complementAdresse2} `
+  }
+  if (profil.complementAdresse1 != '') {
+    foundAddress = `${foundAddress}${profil.complementAdresse1} `
+  }
+  if (profil.nomVoie != '') {
+    foundAddress = `${foundAddress}${profil.nomVoie} `
+  }
+  if (profil.commune != '') {
+    foundAddress = `${foundAddress}${profil.commune} `
+  }
+  if (profil.pays != '') {
+    foundAddress = `${foundAddress}${profil.pays} `
+  }
+  const postcode = profil.commune.substring(0, profil.commune.indexOf(' '))
+  const city = profil.commune.substring(profil.commune.indexOf(' ') + 1)
+  return [
+    {
+      formattedAddress: foundAddress,
+      street: profil.nomVoie,
+      postcode,
+      city
+    }
+  ]
+}
+
+function findPhoneNumbers(receivedCoordinates) {
+  let phone = []
+  const foundNumbers = [
+    receivedCoordinates.numTel1,
+    receivedCoordinates.numTel2
+  ]
+  for (const number of foundNumbers) {
+    if (number === 'A communiquer') {
+      continue
+    }
+    const isMobile = ['06', '07', '+336', '+337'].some(digit =>
+      number.startsWith(digit)
+    )
+    phone.push({
+      type: isMobile ? 'mobile' : 'home',
+      number
+    })
+  }
+  return phone
 }
 
 // Convert a Date object to a ISO date string
