@@ -83,6 +83,7 @@ async function start(fields) {
   const parsedCnafToken = token
   let cnafToken = parsedCnafToken.cnafTokenJwt
 
+  const identity = await fetchIdentity(cnafToken)
   const getPaiements = await requestJSON(
     `${baseUrl}/api/paiementsfront/v1/mon_compte/paiements`,
     {
@@ -95,10 +96,10 @@ async function start(fields) {
   const paiements = getPaiements.paiements
 
   log('info', 'Parsing bills')
-  const bills = await parseDocuments(paiements, token)
+  const bills = await parseDocuments(paiements, token, identity.cafFileNumber)
 
   log('info', 'Parsing attestation')
-  const files = await parseAttestation(token)
+  const files = await parseAttestation(token, identity.cafFileNumber)
 
   log('info', 'Saving data to Cozy')
   await this.saveBills(bills, fields, {
@@ -110,7 +111,6 @@ async function start(fields) {
   await this.saveFiles(files, fields, {
     fileIdAttributes: ['filename']
   })
-  const identity = await fetchIdentity(cnafToken)
   await this.saveIdentity(identity, fields.login)
 }
 
@@ -200,7 +200,7 @@ async function authenticate(login, password) {
   return LtpaToken2, token
 }
 
-async function parseDocuments(docs, token) {
+async function parseDocuments(docs, token, cafFileNumber) {
   await requestHTML(`${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`, {
     headers: {
       Authorization: token
@@ -219,7 +219,7 @@ async function parseDocuments(docs, token) {
     const amount = parseAmount(docs[i].montantPaiement)
 
     // Create bill for paiement
-    bills.push({
+    const oneBill = {
       date,
       amount,
       isRefund: true,
@@ -238,6 +238,7 @@ async function parseDocuments(docs, token) {
       fileAttributes: {
         metadata: {
           contentAuthor: 'caf.fr',
+          cafFileNumber,
           issueDate: utils.formatDate(new Date()),
           datetimeLabel: 'issuDate',
           isSubscription: false,
@@ -247,12 +248,13 @@ async function parseDocuments(docs, token) {
           )
         }
       }
-    })
+    }
+    bills.push(oneBill)
   }
   return bills
 }
 
-async function parseAttestation(token) {
+async function parseAttestation(token, cafFileNumber) {
   await requestHTML(`${baseUrl}/wps/myportal/caffr/moncompte/mesattestations`, {
     resolveWithFullResponse: true
   })
@@ -276,6 +278,7 @@ async function parseAttestation(token) {
       fileAttributes: {
         metadata: {
           contentAuthor: 'caf.fr',
+          cafFileNumber,
           issueDate: utils.formatDate(new Date()),
           datetimeLabel: 'issuDate',
           isSubscription: false,
@@ -318,8 +321,8 @@ async function fetchIdentity(token) {
   result.contact.phone = findPhoneNumbers(
     getFullProfil.utilisateur.coordonneesContact
   )
-  result.contact.civility = getFullProfil.utilisateur.civ
-  result.contact.cnafFileNumber = cnafUserId.split('-')[1]
+  result.contact.gender = computeGender(getFullProfil.utilisateur.civ)
+  result.cafFileNumber = cnafUserId.split('-')[1]
 
   return result
 }
@@ -401,6 +404,17 @@ function findPhoneNumbers(receivedCoordinates) {
     })
   }
   return phone
+}
+
+function computeGender(civility) {
+  if (civility === 'MME') {
+    return 'F'
+  } else if (civility === 'MR') {
+    return 'M'
+  } else {
+    log('warn', "Gender not recognize, returning 'Unknow'")
+    return 'U'
+  }
 }
 
 // Convert a Date object to a ISO date string
