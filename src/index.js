@@ -238,7 +238,7 @@ async function parseDocuments(docs, token, cafFileNumber) {
       fileAttributes: {
         metadata: {
           contentAuthor: 'caf.fr',
-          cafFileNumber,
+          number: cafFileNumber,
           issueDate: utils.formatDate(new Date()),
           datetimeLabel: 'issuDate',
           isSubscription: false,
@@ -278,7 +278,7 @@ async function parseAttestation(token, cafFileNumber) {
       fileAttributes: {
         metadata: {
           contentAuthor: 'caf.fr',
-          cafFileNumber,
+          number: cafFileNumber,
           issueDate: utils.formatDate(new Date()),
           datetimeLabel: 'issuDate',
           isSubscription: false,
