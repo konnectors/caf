@@ -2,6 +2,11 @@ process.env.SENTRY_DSN =
   process.env.SENTRY_DSN ||
   'https://022abee095bc40ea928c610cf0bdbe8d@errors.cozycloud.cc/21'
 
+// This has been added for "Mes papiers" needs
+// It must be removed when everything has been sat up and synchronized
+// When it will be removed, we will only keep 'number' instead of 'cafFileNumber'
+const { default: CozyClient } = require('cozy-client')
+
 const {
   BaseKonnector,
   requestFactory,
@@ -11,6 +16,9 @@ const {
   utils,
   cozyClient
 } = require('cozy-konnector-libs')
+
+// |Mes papiers|
+const flag = require('cozy-flags/dist/flag').default
 
 const models = cozyClient.new.models
 const { Qualification } = models.document
@@ -238,7 +246,7 @@ async function parseDocuments(docs, token, cafFileNumber) {
       fileAttributes: {
         metadata: {
           contentAuthor: 'caf.fr',
-          cafFileNumber,
+          // number: cafFileNumber,
           issueDate: utils.formatDate(new Date()),
           datetimeLabel: 'issuDate',
           isSubscription: false,
@@ -249,6 +257,16 @@ async function parseDocuments(docs, token, cafFileNumber) {
         }
       }
     }
+    // |Mes papiers|
+    this.client = CozyClient.fromEnv()
+    await this.client.registerPlugin(flag.plugin)
+    await this.client.plugins.flags.initializing
+    if (flag('mespapiers.migrated.metadata')) {
+      oneBill.fileAttributes.metadata.number = cafFileNumber
+    } else {
+      oneBill.fileAttributes.metadata.cafFileNumber = cafFileNumber
+    }
+    // =====
     bills.push(oneBill)
   }
   return bills
@@ -262,32 +280,38 @@ async function parseAttestation(token, cafFileNumber) {
   const lastMonth = subMonths(today, 1)
   const [year, month] = dateToYearMonth(lastMonth)
   const lastDay = daysInMonth(month, year)
-
-  // A array with one element
-  return [
-    {
-      shouldReplaceFile: () => true,
-      requestOptions: {
-        // The PDF required an authorization
-        headers: {
-          Authorization: token.cnafTokenJwt
-        }
-      },
-      fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
-      filename: `caf_attestation_quotient_familial.pdf`,
-      fileAttributes: {
-        metadata: {
-          contentAuthor: 'caf.fr',
-          cafFileNumber,
-          issueDate: utils.formatDate(new Date()),
-          datetimeLabel: 'issuDate',
-          isSubscription: false,
-          carbonCopy: true,
-          qualification: Qualification.getByLabel('caf')
-        }
+  const attestation = {
+    shouldReplaceFile: () => true,
+    requestOptions: {
+      // The PDF required an authorization
+      headers: {
+        Authorization: token.cnafTokenJwt
+      }
+    },
+    fileurl: `${baseUrl}/api/attestationsfront/v1/mon_compte/attestation_sur_periode/qf/${year}${month}01/${year}${month}${lastDay}`,
+    filename: `caf_attestation_quotient_familial.pdf`,
+    fileAttributes: {
+      metadata: {
+        contentAuthor: 'caf.fr',
+        // number: cafFileNumber,
+        issueDate: utils.formatDate(new Date()),
+        datetimeLabel: 'issuDate',
+        isSubscription: false,
+        carbonCopy: true,
+        qualification: Qualification.getByLabel('caf')
       }
     }
-  ]
+  }
+  // |Mes papiers|
+  if (flag('mespapiers.migrated.metadata')) {
+    attestation.fileAttributes.metadata.number = cafFileNumber
+  } else {
+    attestation.fileAttributes.metadata.cafFileNumber = cafFileNumber
+  }
+  // =====
+
+  // A array with one element
+  return [attestation]
 }
 
 async function fetchIdentity(token) {
