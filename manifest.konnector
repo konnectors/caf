@@ -126,7 +126,8 @@
     }
   },
   "qualification_labels": [
-    "caf"
+    "caf",
+    "payment_proof_family_allowance"
   ],
   "features": [
     "LOGIN_OK",
