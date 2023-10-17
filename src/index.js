@@ -110,12 +110,14 @@ async function start(fields) {
   const files = await parseAttestation(token, identity.cafFileNumber)
 
   log('info', 'Saving data to Cozy')
+  log('warn', `CAF saving ${bills.length} bills`)
   await this.saveBills(bills, fields, {
     contentType: 'application/pdf',
     linkBankOperations: false,
     fileIdAttributes: ['date', 'amount']
   })
   // Only one attestation send, replaced each time
+  log('warn', `CAF saving ${bills.length} files (attestation)`)
   await this.saveFiles(files, fields, {
     fileIdAttributes: ['filename']
   })
