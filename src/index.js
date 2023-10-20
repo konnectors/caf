@@ -490,7 +490,7 @@ function normalizeLogin(login) {
     return normalizedLogin
   }
   if (login && login.length < 13) {
-    log('info', 'Login length is under 13 characters')
+    log('error', 'Login length is under 13 characters')
     throw new Error(errors.LOGIN_FAILED)
   }
 
