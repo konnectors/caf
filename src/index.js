@@ -371,6 +371,9 @@ function findMaritalStatus(receivedStatus) {
   if (receivedStatus.match(/concubinage/)) {
     return 'single'
   }
+  if (receivedStatus.match(/séparée?/)) {
+    return 'single'
+  }
   if (receivedStatus.match(/mariée? depuis le/)) {
     return 'married'
   }
