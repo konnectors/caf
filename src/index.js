@@ -51,6 +51,7 @@ async function start(fields) {
   try {
     LtpaToken2 = await retry(authenticate, {
       backoff: 3,
+      max_tries: 3,
       throw_original: true,
       context: this,
       args: [fields.login, fields.password]
