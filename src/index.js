@@ -51,13 +51,18 @@ async function start(fields) {
   try {
     LtpaToken2 = await retry(authenticate, {
       backoff: 3,
+      max_tries: 3,
       throw_original: true,
       context: this,
       args: [fields.login, fields.password]
     })
   } catch (e) {
-    if (e.message === 'LOGIN_FAILED' || e.message.includes('CGU_FORM')) {
-      throw e
+    if (
+      e.message === 'LOGIN_FAILED' ||
+      e.message.includes('CGU_FORM') ||
+      e.message.includes('USER_ACTION_NEEDED')
+    ) {
+      throw new Error(e)
     } else if (e.statusCode === 400) {
       // Theres is modifications on the website regarding the login format.
       // Now we need to input the social security number without the last 2 characters.
@@ -168,6 +173,7 @@ async function authenticate(login, password) {
       contexteAppel: 'caffr'
     }
   })
+
   for (const etape of authResp.etapesConnexion) {
     if (etape.nom === 'CGU' && etape.obligatoire === true) {
       throw new Error('USER_ACTION_NEEDED.CGU_FORM')
@@ -182,7 +188,14 @@ async function authenticate(login, password) {
       resolveWithFullResponse: true
     }
   )
-  cnafUserId = LtpaToken2.body.html().match(/var userid = "([0-9-]*)";/)[1]
+  // When not logged completly, cnafID is not yet in the html
+  try {
+    cnafUserId = LtpaToken2.body.html().match(/var userid = "([0-9-]*)";/)[1]
+  } catch (e) {
+    log('warn', 'Impossible to evalutate cnafUserId, continuing')
+    throw new Error('USER_ACTION_NEEDED.NOT_REGISTRED_ANYMORE')
+  }
+
   LtpaToken2 = LtpaToken2.request.headers.cookie
 
   // Check if connected
@@ -358,6 +371,9 @@ function findMaritalStatus(receivedStatus) {
   if (receivedStatus.match(/concubinage/)) {
     return 'single'
   }
+  if (receivedStatus.match(/séparée?/)) {
+    return 'single'
+  }
   if (receivedStatus.match(/mariée? depuis le/)) {
     return 'married'
   }
@@ -490,7 +506,7 @@ function normalizeLogin(login) {
     return normalizedLogin
   }
   if (login && login.length < 13) {
-    log('info', 'Login length is under 13 characters')
+    log('error', 'Login length is under 13 characters')
     throw new Error(errors.LOGIN_FAILED)
   }
 
