@@ -12,7 +12,6 @@ const {
   requestFactory,
   errors,
   log,
-  retry,
   utils,
   cozyClient
 } = require('cozy-konnector-libs')
@@ -49,13 +48,7 @@ async function start(fields) {
   log('info', 'Authenticating ...')
   let LtpaToken2
   try {
-    LtpaToken2 = await retry(authenticate, {
-      backoff: 3,
-      max_tries: 3,
-      throw_original: true,
-      context: this,
-      args: [fields.login, fields.password]
-    })
+    LtpaToken2 = await authenticate.bind(this)(fields.login, fields.password)
   } catch (e) {
     if (
       e.message === 'LOGIN_FAILED' ||
