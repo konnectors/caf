@@ -167,14 +167,23 @@ async function authenticate(login, password) {
     }
   })
 
+  // Checking for auth
   for (const etape of authResp.etapesConnexion) {
     if (etape.nom === 'CGU' && etape.obligatoire === true) {
       throw new Error('USER_ACTION_NEEDED.CGU_FORM')
     }
   }
+  if (authResp.codeRetour === 106) {
+    throw new Error('USER_ACTION_NEEDED.CHANGE_PASSWORD')
+  }
+  if (authResp.codeRetour != 0) {
+    log(
+      'warn',
+      `Auth return a non 0 code, code : ${authResp.codeRetour}, not nominal`
+    )
+  }
 
   // Get LtpaToken2 with ccode
-
   let LtpaToken2 = await requestHTML(
     `https://wwwd.caf.fr/wpc-connexionportail-web/s/AccesPortail?urlredirect=/wps/myportal/caffr/moncompte/tableaudebord&ccode=${authResp.ccode}`,
     {
