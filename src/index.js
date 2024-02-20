@@ -55,7 +55,7 @@ async function start(fields) {
       e.message.includes('CGU_FORM') ||
       e.message.includes('USER_ACTION_NEEDED')
     ) {
-      throw new Error(e)
+      throw e
     } else if (e.statusCode === 400) {
       // Theres is modifications on the website regarding the login format.
       // Now we need to input the social security number without the last 2 characters.
