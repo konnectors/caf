@@ -382,6 +382,9 @@ function findMaritalStatus(receivedStatus) {
   if (receivedStatus.match(/concubinage/)) {
     return 'single'
   }
+  if (receivedStatus.match(/célibataire/)) {
+    return 'single'
+  }
   if (receivedStatus.match(/séparée?/)) {
     return 'single'
   }
@@ -391,7 +394,7 @@ function findMaritalStatus(receivedStatus) {
   if (receivedStatus.match(/pacsée? depuis le/)) {
     return 'pacs'
   } else {
-    log('warn', 'The received marital status is not known')
+    log('warn', `The received marital status is not known, ${receivedStatus}`)
     return undefined
   }
 }
