@@ -85,7 +85,6 @@ async function start(fields) {
     },
     method: 'GET'
   })
-
   const parsedCnafToken = token
   let cnafToken = parsedCnafToken.cnafTokenJwt
 
@@ -195,7 +194,6 @@ async function authenticate(login, password) {
     cnafUserId = LtpaToken2.body.html().match(/var userid = "([0-9-]*)";/)[1]
   } catch (e) {
     log('warn', 'Impossible to evalutate cnafUserId, continuing')
-    throw new Error('USER_ACTION_NEEDED.NOT_REGISTRED_ANYMORE')
   }
 
   LtpaToken2 = LtpaToken2.request.headers.cookie
@@ -342,15 +340,26 @@ async function fetchIdentity(token) {
       method: 'GET'
     }
   )
-  const getPartialProfil = await requestJSON(
-    `${baseUrl}/api/profilreduitfront/v1/mon_compte/profil_reduit`,
-    {
-      headers: {
-        Authorization: token
-      },
-      method: 'GET'
-    }
-  )
+  let getPartialProfil
+  try {
+    getPartialProfil = await requestJSON(
+      `${baseUrl}/api/profilreduitfront/v1/mon_compte/profil_reduit`,
+      {
+        headers: {
+          Authorization: token
+        },
+        method: 'GET'
+      }
+    )
+  } catch (e) {
+    log('warn', e)
+    log(
+      'warn',
+      'Impossible to fetch identity but logged, old account, exiting nicely'
+    )
+    process.exit(0)
+  }
+
   const result = { contact: {} }
 
   result.contact.maritalStatus = findMaritalStatus(
