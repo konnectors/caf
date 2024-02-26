@@ -445,7 +445,7 @@ function findPhoneNumbers(receivedCoordinates) {
     receivedCoordinates.numTel2
   ]
   for (const number of foundNumbers) {
-    if (number === 'A communiquer') {
+    if (!number || number === 'A communiquer') {
       continue
     }
     const isMobile = ['06', '07', '+336', '+337'].some(digit =>
