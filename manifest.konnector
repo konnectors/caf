@@ -101,7 +101,7 @@
           "label": "Social Security number (13 digits)"
         }
       },
-      "short_description": "Fetch your documents from the CAF website",
+      "short_description": "Fetch your documents from the CAF website.",
       "long_description": "CAF is a French child familly service available on [https://www.caf.fr](https://www.caf.fr).\n\n**Connect your CAF account to your Cozy for**\n\n- getting your payment certificates\n- importing the last certificate of family quotient\n\n** Access directly to your documents in your personal Drive **\n\nBy connecting your CAF account, your Cozy automatically creates a folder in **Drive > Administrative > CAF**.\n\n**Follow the amount of your benefits with Banks **\n\nThe recovered certificates are automatically linked to the CAF banking transactions associated with your account if you use the Banks application.\n\n**Configuration**\n\nTo connect your account, you just have to fill in the fields :\n- your beneficiary number\n- your postcode\n- your date of birth\n- your password created to access the www.caf.fr website.\n\nOnce logged in, your Cozy will automatically connect to your CAF account to retrieve new items and store them in a CAF folder in Drive.\n\nIf you disconnect your CAF account, the information already saved in your Cozy remains available. You can delete them manually elsewhere.",
       "permissions": {
         "bank operations": {
