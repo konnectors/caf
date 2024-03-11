@@ -1,5 +1,5 @@
 {
-  "version": "1.12.0",
+  "version": "1.22.0",
   "name": "CAF",
   "type": "konnector",
   "language": "node",
@@ -50,6 +50,9 @@
     },
     "accounts": {
       "type": "io.cozy.accounts"
+    },
+    "identities": {
+      "type": "io.cozy.identities"
     }
   },
   "developer": {
@@ -70,7 +73,7 @@
         }
       },
       "short_description": "Récupère vos documents CAF",
-      "long_description": "CAF est votre service d'allocations familiales disponible sur [https://www.caf.fr](www.caf.fr).\n\n**Connectez votre compte CAF à votre Cozy pour**\n\n- récupérer vos attestations de paiement\n- importer la dernière attestation de quotient familial\n\n**Accédez directement à vos documents dans votre Drive personnel**\n\nEn connectant votre compte CAF, votre Cozy crée automatiquement un dossier dans **Drive > Administratif > CAF**. Vos documents CAF sont à portée de main et toujours accessibles !\n\n**Suivez le montant de vos prestations avec Banks**\n\nLes attestations récupérées sont automatiquement liées aux opérations bancaires CAF associées à votre compte si vous utilisez l’application  Banks. \n\n**Configuration**\n\nPour connecter votre compte, il vous suffit de renseigner dans les champs : \n- votre numéro allocataire\n- votre code postal\n- votre date de naissance\n- votre mot de passe créé pour accéder au site www.caf.fr\n\nUne fois connecté, votre Cozy se connectera régulièrement à votre compte CAF pour récupérer les nouveaux éléments et les historiser dans un dossier CAF dans Drive.\n\nSi vous déconnectez votre compte CAF, les informations déjà sauvegardées dans votre Cozy restent disponibles. Vous pouvez les supprimer manuellement par ailleurs.",
+      "long_description": "CAF est votre service d'allocations familiales disponible sur [https://www.caf.fr](https://www.caf.fr).\n\n**Connectez votre compte CAF à votre Cozy pour**\n\n- récupérer vos attestations de paiement\n- importer la dernière attestation de quotient familial\n\n**Accédez directement à vos documents dans votre Drive personnel**\n\nEn connectant votre compte CAF, votre Cozy crée automatiquement un dossier dans **Drive > Administratif > CAF**. Vos documents CAF sont à portée de main et toujours accessibles !\n\n**Suivez le montant de vos prestations avec Banks**\n\nLes attestations récupérées sont automatiquement liées aux opérations bancaires CAF associées à votre compte si vous utilisez l’application  Banks. \n\n**Configuration**\n\nPour connecter votre compte, il vous suffit de renseigner dans les champs : \n- votre numéro allocataire\n- votre code postal\n- votre date de naissance\n- votre mot de passe créé pour accéder au site www.caf.fr\n\nUne fois connecté, votre Cozy se connectera régulièrement à votre compte CAF pour récupérer les nouveaux éléments et les historiser dans un dossier CAF dans Drive.\n\nSi vous déconnectez votre compte CAF, les informations déjà sauvegardées dans votre Cozy restent disponibles. Vous pouvez les supprimer manuellement par ailleurs.",
       "permissions": {
         "carboncopy": {
           "description": "Utilisé pour certifier que vos fichiers sont copie conforme avec les documents d'origine"
@@ -86,6 +89,9 @@
         },
         "accounts": {
           "description": "Utilisé pour obtenir les données du compte"
+        },
+        "identities": {
+          "description": "Utilise pour sauvegarder votre identité"
         }
       }
     },
@@ -96,7 +102,7 @@
         }
       },
       "short_description": "Fetch your documents from the CAF website",
-      "long_description": "CAF is a French child familly service available on [https://www.caf.fr](www.caf.fr).\n\n**Connect your CAF account to your Cozy for**\n\n- getting your payment certificates\n- importing the last certificate of family quotient\n\n** Access directly to your documents in your personal Drive **\n\nBy connecting your CAF account, your Cozy automatically creates a folder in **Drive > Administrative > CAF**.\n\n**Follow the amount of your benefits with Banks **\n\nThe recovered certificates are automatically linked to the CAF banking transactions associated with your account if you use the Banks application.\n\n**Configuration**\n\nTo connect your account, you just have to fill in the fields :\n- your beneficiary number\n- your postcode\n- your date of birth\n- your password created to access the www.caf.fr website.\n\nOnce logged in, your Cozy will automatically connect to your CAF account to retrieve new items and store them in a CAF folder in Drive.\n\nIf you disconnect your CAF account, the information already saved in your Cozy remains available. You can delete them manually elsewhere.",
+      "long_description": "CAF is a French child familly service available on [https://www.caf.fr](https://www.caf.fr).\n\n**Connect your CAF account to your Cozy for**\n\n- getting your payment certificates\n- importing the last certificate of family quotient\n\n** Access directly to your documents in your personal Drive **\n\nBy connecting your CAF account, your Cozy automatically creates a folder in **Drive > Administrative > CAF**.\n\n**Follow the amount of your benefits with Banks **\n\nThe recovered certificates are automatically linked to the CAF banking transactions associated with your account if you use the Banks application.\n\n**Configuration**\n\nTo connect your account, you just have to fill in the fields :\n- your beneficiary number\n- your postcode\n- your date of birth\n- your password created to access the www.caf.fr website.\n\nOnce logged in, your Cozy will automatically connect to your CAF account to retrieve new items and store them in a CAF folder in Drive.\n\nIf you disconnect your CAF account, the information already saved in your Cozy remains available. You can delete them manually elsewhere.",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
@@ -112,12 +118,16 @@
         },
         "accounts": {
           "description": "Required to get the account's data"
+        },
+        "identities": {
+          "description": "Required to save your identity"
         }
       }
     }
   },
   "qualification_labels": [
-    "caf"
+    "caf",
+    "payment_proof_family_allowance"
   ],
   "features": [
     "LOGIN_OK",
