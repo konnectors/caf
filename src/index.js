@@ -172,7 +172,7 @@ async function authenticate(login, password) {
       throw new Error('USER_ACTION_NEEDED.CGU_FORM')
     }
   }
-  if (authResp.codeRetour === 106) {
+  if (authResp.codeRetour === 106 || authResp.codeRetour === 111) {
     throw new Error('USER_ACTION_NEEDED.CHANGE_PASSWORD')
   }
   if (authResp.codeRetour != 0) {
