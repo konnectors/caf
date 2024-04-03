@@ -58,7 +58,8 @@ const {
   errors,
   log,
   utils,
-  cozyClient
+  cozyClient,
+  solveCaptcha
 } = require('cozy-konnector-libs')
 
 // |Mes papiers|
@@ -202,7 +203,7 @@ async function authenticate(login, password) {
 
   await requestHTML(`${baseUrl}/wps/session/RefreshSession.jsp`)
 
-  const authResp = await requestJSON({
+  let authResp = await requestJSON({
     url: `${baseUrl}/api/connexionmiddle/v3/connexion_personne`,
     gzip: true,
     headers: {
@@ -224,8 +225,38 @@ async function authenticate(login, password) {
       throw new Error('USER_ACTION_NEEDED.CGU_FORM')
     }
   }
+  // Checking for force password change
   if (authResp.codeRetour === 106 || authResp.codeRetour === 111) {
     throw new Error('USER_ACTION_NEEDED.CHANGE_PASSWORD')
+  }
+  // Checking for captcha
+  if (authResp.codeRetour === 12 || authResp.captchaIMG.length) {
+    const captchaImage = authResp.captchaIMG
+    try {
+      const captchaResponse = await solveCaptcha({
+        type: 'image',
+        captchaImage
+      })
+      log('info', captchaResponse)
+      authResp = await requestJSON({
+        url: `${baseUrl}/api/connexionmiddle/v3/connexion_personne`,
+        gzip: true,
+        headers: {
+          Authorization: token
+        },
+        method: 'POST',
+        json: {
+          identifiant: login,
+          motDePasse: password,
+          origineDemande: 'WEB',
+          captcha: captchaResponse,
+          contexteAppel: 'caffr'
+        }
+      })
+    } catch (error) {
+      log('error', error.message)
+      throw new Error(errors.VENDOR_DOWN)
+    }
   }
   if (authResp.codeRetour != 0) {
     log(
