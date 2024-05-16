@@ -436,17 +436,23 @@ function findMaritalStatus(receivedStatus) {
   // We don't dispose of every status for the moment, it will be filled up by the time
   if (receivedStatus.match(/concubinage/)) {
     return 'single'
-  }
-  if (receivedStatus.match(/célibataire/)) {
+  } else if (receivedStatus.match(/célibataire/)) {
     return 'single'
-  }
-  if (receivedStatus.match(/séparée?/)) {
+  } else if (receivedStatus.match(/séparée?/)) {
     return 'single'
-  }
-  if (receivedStatus.match(/mariée? depuis le/)) {
+  } else if (receivedStatus.match(/divorcée?/)) {
+    return 'single'
+  } else if (receivedStatus.match(/isolée?/)) {
+    return 'single'
+  } else if (receivedStatus.match(/en reprise de vie maritale/)) {
+    // en reprise de vie maritale depuis...
     return 'married'
-  }
-  if (receivedStatus.match(/pacsée? depuis le/)) {
+  } else if (receivedStatus.match(/en reprise de vie commune/)) {
+    // en reprise de vie commune avec mon conjoint depuis...
+    return 'single'
+  } else if (receivedStatus.match(/mariée? depuis le/)) {
+    return 'married'
+  } else if (receivedStatus.match(/pacsée? depuis le/)) {
     return 'pacs'
   } else {
     log('warn', `The received marital status is not known, ${receivedStatus}`)
