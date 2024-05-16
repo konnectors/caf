@@ -422,7 +422,7 @@ async function fetchIdentity(token) {
   )
   result.contact.numberOfDependants = findNumberOfDependants(getPartialProfil)
   result.contact.address = findAddressInfos(getFullProfil.adresse)
-  result.contact.email = getFullProfil.utilisateur.coordonneesContact.mail
+  result.contact.email = [getFullProfil.utilisateur.coordonneesContact.mail]
   result.contact.phone = findPhoneNumbers(
     getFullProfil.utilisateur.coordonneesContact
   )
