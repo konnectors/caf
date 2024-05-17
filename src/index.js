@@ -67,7 +67,7 @@ const flag = require('cozy-flags/dist/flag').default
 const models = cozyClient.new.models
 const { Qualification } = models.document
 
-const requestHTML = requestFactory({
+let requestHTML = requestFactory({
   debug: false,
   cheerio: true,
   json: false,
@@ -77,7 +77,7 @@ const requestHTML = requestFactory({
   },
   ca: CACert
 })
-const requestJSON = requestFactory({
+let requestJSON = requestFactory({
   debug: false,
   cheerio: false,
   json: true,
@@ -181,13 +181,10 @@ async function authenticate(login, password) {
     log('error', 'Some fields are not defined')
     throw new Error(errors.LOGIN_FAILED)
   }
+  // Initiate session and test max 3 IP
+  await verifyIPAndInitiateSession(3)
 
-  // Reset / Create session
-  await requestHTML('https://wwwd.caf.fr', {
-    resolveWithFullResponse: true
-  })
   log('debug', 'First signature')
-
   // Ask for authorization
   let token
   try {
@@ -580,4 +577,58 @@ function normalizeLogin(login) {
   }
 
   return login
+}
+
+async function verifyIPAndInitiateSession(maxRetry = 3) {
+  let retry = maxRetry
+  while (retry > 1) {
+    try {
+      retry = retry - 1
+      await Promise.race([
+        timeout(10000), // Racing again a 10 sec timeout
+        requestHTML(
+          requestHTML('https://wwwd.caf.fr', {
+            resolveWithFullResponse: true
+          })
+        )
+      ])
+      log('warn', 'Caf server is available on this IP')
+    } catch (e) {
+      if (e.message == 'TIMEOUT') {
+        if (retry <= 1) {
+          throw new Error('IP_BLOCKED')
+        }
+        log('warn', 'Rotating IP because this one seems block')
+        const newString = require('crypto').randomBytes(16).toString('hex')
+        requestHTML = requestFactory({
+          debug: false,
+          cheerio: true,
+          json: false,
+          jar: true,
+          headers: {
+            'x-lpm-session': newString
+          },
+          ca: CACert
+        })
+        requestJSON = requestFactory({
+          debug: false,
+          cheerio: false,
+          json: true,
+          jar: true,
+          headers: {
+            'x-lpm-session': newString
+          },
+          ca: CACert
+        })
+      } else {
+        throw e
+      }
+    }
+  }
+}
+
+async function timeout(ms) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => reject(new Error('TIMEOUT')), ms)
+  })
 }
