@@ -230,7 +230,7 @@ async function authenticate(login, password) {
     throw new Error('USER_ACTION_NEEDED.CHANGE_PASSWORD')
   }
   // Checking for captcha
-  if (authResp.codeRetour === 12 || authResp.captchaIMG?.length) {
+  if (authResp.codeRetour === 12 && authResp.captchaIMG?.length) {
     const captchaImage = authResp.captchaIMG
     try {
       const captchaResponse = await solveCaptcha({
