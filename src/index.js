@@ -235,7 +235,8 @@ async function authenticate(login, password) {
     try {
       const captchaResponse = await solveCaptcha({
         type: 'image',
-        body
+        body,
+        requestInstance: requestJSON
       })
       log('info', captchaResponse)
       authResp = await requestJSON({
