@@ -231,11 +231,11 @@ async function authenticate(login, password) {
   }
   // Checking for captcha
   if (authResp.codeRetour === 12 && authResp.captchaIMG?.length) {
-    const captchaImage = authResp.captchaIMG
+    const body = authResp.captchaIMG
     try {
       const captchaResponse = await solveCaptcha({
         type: 'image',
-        captchaImage
+        body
       })
       log('info', captchaResponse)
       authResp = await requestJSON({
