@@ -238,7 +238,7 @@ async function authenticate(login, password) {
         body,
         requestInstance: requestJSON
       })
-      log('info', captchaResponse)
+      log('info', 'captcha response ' + captchaResponse)
       authResp = await requestJSON({
         url: `${baseUrl}/api/connexionmiddle/v3/connexion_personne`,
         gzip: true,
@@ -259,11 +259,18 @@ async function authenticate(login, password) {
       throw new Error(errors.VENDOR_DOWN)
     }
   }
-  if (authResp.codeRetour != 0) {
+  if (authResp.codeRetour !== 0) {
     log(
       'warn',
       `Auth return a non 0 code, code : ${authResp.codeRetour}, not nominal`
     )
+    log('debug', JSON.stringify(Object.keys(authResp), null, 2))
+    log('debug', 'authResp.dureeGelRestante: ' + authResp.dureeGelRestante)
+    log(
+      'debug',
+      'authResp.nombreMaxTentatives: ' + authResp.nombreMaxTentatives
+    )
+    log('debug', 'authResp.nombreEchecs: ' + authResp.nombreEchecs)
   }
 
   // Get LtpaToken2 with ccode
