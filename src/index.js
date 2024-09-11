@@ -3,6 +3,7 @@ import {
   RequestInterceptor
 } from 'cozy-clisk/dist/contentscript'
 import Minilog from '@cozy/minilog'
+
 const log = Minilog('ContentScript')
 Minilog.enable('cafCCC')
 
@@ -38,19 +39,6 @@ const requestInterceptor = new RequestInterceptor([
 requestInterceptor.init()
 
 class CafContentScript extends ContentScript {
-  async navigateToLoginForm() {
-    this.log('info', '🤖 navigateToLoginForm')
-    await this.goto(baseUrl)
-    await this.waitForElementInWorker(
-      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
-    )
-    await this.runInWorker(
-      'click',
-      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
-    )
-    await this.waitForElementInWorker('#inputMotDePasse')
-  }
-
   async onWorkerReady() {
     await this.waitForElementNoReload('#inputMotDePasse')
     this.watchLoginForm.bind(this)()
@@ -97,7 +85,12 @@ class CafContentScript extends ContentScript {
     }
     const authenticated = await this.runInWorker('checkAuthenticated')
     if (!authenticated) {
-      this.log('info', 'Not authenticated')
+      const credentials = await this.getCredentials()
+      if (credentials) {
+        this.log('info', 'Credentials found, trying autoFill ...')
+        await this.autoFill(credentials)
+      }
+      this.log('info', 'Waiting for user to complete login')
       await this.showLoginFormAndWaitForAuthentication()
     }
     this.unblockWorkerInteractions()
@@ -113,6 +106,34 @@ class CafContentScript extends ContentScript {
     }
   }
 
+  async navigateToLoginForm() {
+    this.log('info', '🤖 navigateToLoginForm')
+    await this.gotoAndCheckCaptcha(
+      baseUrl,
+      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
+    )
+    await this.runInWorker(
+      'click',
+      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
+    )
+    await this.waitForElementInWorker('#inputMotDePasse')
+  }
+
+  async gotoAndCheckCaptcha(url, awaitedElement) {
+    this.log('info', '📍️ gotoAndCheckCaptcha starts')
+    await this.goto(url)
+    await Promise.race([
+      this.waitForElementInWorker(awaitedElement),
+      this.waitForElementInWorker('h1', {
+        includesText: 'Nous nous excusons pour le désagrément...'
+      })
+    ])
+    if (await this.runInWorker('checkCaptcha')) {
+      this.log('info', 'Captcha found, waiting for user action')
+      await this.showCaptchaFormAndWaitForUserAction(awaitedElement)
+    }
+  }
+
   async checkAuthenticated() {
     return Boolean(document.querySelector('#paiements-droits-collapse'))
   }
@@ -124,6 +145,22 @@ class CafContentScript extends ContentScript {
       method: 'waitForAuthenticated'
     })
     await this.setWorkerState({ visible: false })
+  }
+
+  async showCaptchaFormAndWaitForUserAction(element) {
+    log.debug('showCaptchaFormAndWaitForUserAction start')
+    await this.setWorkerState({ visible: true })
+    await this.waitForElementInWorker(element)
+    await this.setWorkerState({ visible: false })
+  }
+
+  async autoFill(credentials) {
+    this.log('info', '📍️ autoFill starts')
+    const nirSelector = '#nir'
+    const passwordSelector = '#inputMotDePasse'
+    await this.waitForElementInWorker(nirSelector)
+    await this.runInWorker('fillText', nirSelector, credentials.login)
+    await this.runInWorker('fillText', passwordSelector, credentials.password)
   }
 
   async getUserDataFromWebsite() {
@@ -341,12 +378,22 @@ class CafContentScript extends ContentScript {
     result.cafFileNumber = this.store.cnafUserId
     return result
   }
+
+  checkCaptcha() {
+    this.log('info', '📍️ checkCaptcha starts')
+    if (document.location.href.includes('https://validate.perfdrive.com/')) {
+      return true
+    }
+    return false
+  }
 }
 
 const connector = new CafContentScript({ requestInterceptor })
-connector.init({ additionalExposedMethodsNames: [] }).catch(err => {
-  log.warn(err)
-})
+connector
+  .init({ additionalExposedMethodsNames: ['checkCaptcha'] })
+  .catch(err => {
+    log.warn(err)
+  })
 
 // Convert a date from format Ymmdd  to Date object
 function parseDate(text) {
