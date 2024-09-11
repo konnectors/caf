@@ -52,6 +52,24 @@ class CafContentScript extends ContentScript {
       const unspacedLogin = login.replace(/\s+/g, '')
       this.store.userCredentials = { login: unspacedLogin, password }
     }
+    if (event === 'requestResponse') {
+      if (payload.identifier === 'part-identity') {
+        this.log('debug', `part-identity request intercepted`)
+        const { response } = payload
+        this.store.partialIdentity = { response }
+      }
+      if (payload.identifier === 'full-identity') {
+        this.log('debug', `full-identity request intercepted`)
+        const { response } = payload
+        this.store.fullIdentity = { response }
+      }
+      if (payload.identifier === 'paiements') {
+        this.log('debug', `part-identity request intercepted`)
+        const { response } = payload
+        this.store.paiements = { response }
+        this.store.token = payload.requestHeaders.Authorization
+      }
+    }
   }
 
   watchLoginForm() {
@@ -212,12 +230,12 @@ class CafContentScript extends ContentScript {
 
   async fetchPaiements() {
     this.log('info', '📍️ fetchPaiements starts')
-    await this.goto(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMesPaiements'
+    await this.gotoAndCheckCaptcha(
+      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMesPaiements',
+      '#mes-attestations-collapse'
     )
-    const interception = await this.waitForRequestInterception('paiements')
-    this.store.token = interception.requestHeaders.Authorization
-    const bills = await this.computeBills(interception.response.paiements)
+    const interceptedBills = this.store.paiements.response.paiements
+    const bills = await this.computeBills(interceptedBills)
     return bills
   }
 
@@ -281,10 +299,10 @@ class CafContentScript extends ContentScript {
 
   async fetchAttestations() {
     this.log('info', '📍️ fetchAttestations starts')
-    await this.goto(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteAttestationPaiement'
+    await this.gotoAndCheckCaptcha(
+      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteAttestationPaiement',
+      '.label-form-cnaf'
     )
-    await this.waitForElementInWorker('.label-form-cnaf')
     const attestations = await this.computeAttestations()
     return attestations
   }
@@ -342,27 +360,22 @@ class CafContentScript extends ContentScript {
 
   async fetchIdentity() {
     this.log('info', '📍️ fetchIdentity starts')
-    await this.goto('https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte')
-    const firstInterception = await this.waitForRequestInterception(
-      'part-identity'
+    await this.gotoAndCheckCaptcha(
+      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte',
+      '#paiements-droits-collapse'
     )
-    const partialInfos = firstInterception.response
-    await this.goto(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil'
+    await this.gotoAndCheckCaptcha(
+      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil',
+      'cnaf-cds-profilcomplet-allocataire'
     )
-    const secondInterception = await this.waitForRequestInterception(
-      'full-identity'
-    )
-    const fullInfos = secondInterception.response
-    this.store.userInfos = { partialInfos, fullInfos }
     const identity = await this.computeIdentity()
     return identity
   }
 
   async computeIdentity() {
     this.log('info', '📍️ computeIdentity starts')
-    const fullProfil = this.store.userInfos.fullInfos
-    const partialProfil = this.store.userInfos.partialInfos
+    const fullProfil = this.store.fullIdentity.response
+    const partialProfil = this.store.partialIdentity.response
     const result = { contact: {} }
 
     result.contact.maritalStatus = findMaritalStatus(
