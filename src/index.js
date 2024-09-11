@@ -24,13 +24,13 @@ const requestInterceptor = new RequestInterceptor([
   },
   // Need both interceptions as infos are needed in both requests
   {
-    identifier: 'part-identity',
+    identifier: 'partialIdentity',
     method: 'GET',
     url: '/api/profilreduitfront/v1/mon_compte/profil_reduit',
     serialization: 'json'
   },
   {
-    identifier: 'full-identity',
+    identifier: 'fullIdentity',
     method: 'GET',
     url: '/api/profilcompletfront/v1/profilcalp',
     serialization: 'json'
@@ -53,20 +53,10 @@ class CafContentScript extends ContentScript {
       this.store.userCredentials = { login: unspacedLogin, password }
     }
     if (event === 'requestResponse') {
-      if (payload.identifier === 'part-identity') {
-        this.log('debug', `part-identity request intercepted`)
-        const { response } = payload
-        this.store.partialIdentity = { response }
-      }
-      if (payload.identifier === 'full-identity') {
-        this.log('debug', `full-identity request intercepted`)
-        const { response } = payload
-        this.store.fullIdentity = { response }
-      }
-      if (payload.identifier === 'paiements') {
-        this.log('debug', `part-identity request intercepted`)
-        const { response } = payload
-        this.store.paiements = { response }
+      const { identifier, response } = payload
+      this.log('debug', `${identifier} request intercepted`)
+      this.store[identifier] = { response }
+      if (identifier === 'paiements') {
         this.store.token = payload.requestHeaders.Authorization
       }
     }
@@ -130,11 +120,10 @@ class CafContentScript extends ContentScript {
       baseUrl,
       '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
     )
-    await this.runInWorker(
-      'click',
-      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
+    await this.clickAndWait(
+      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]',
+      '#inputMotDePasse'
     )
-    await this.waitForElementInWorker('#inputMotDePasse')
   }
 
   async gotoAndCheckCaptcha(url, awaitedElement) {
