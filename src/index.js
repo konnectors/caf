@@ -235,8 +235,19 @@ class CafContentScript extends ContentScript {
     this.log('info', '📍️ fetchPaiements starts')
     await this.gotoAndCheckCaptcha(
       'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMesPaiements',
-      '#mes-attestations-collapse'
+      '#paiements-droits-complet-collapse'
     )
+    const hasNoPaiements = await this.evaluateInWorker(() => {
+      return document
+        .querySelector('#paiements-droits-complet-collapse > div')
+        .textContent.includes(
+          "Il n'y a pas de paiement effectué sur votre compte."
+        )
+    })
+    if (hasNoPaiements) {
+      this.log('warn', 'Accounts seems to have no payments')
+      return []
+    }
     const interceptedBills = this.store.paiements.response.paiements
     const bills = await this.computeBills(interceptedBills)
     return bills
