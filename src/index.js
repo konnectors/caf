@@ -142,6 +142,11 @@ class CafContentScript extends ContentScript {
   }
 
   async checkAuthenticated() {
+    // Some login may lead directly to the userInfos page for inactive accounts
+    if (document.querySelector('cnaf-cds-profilcomplet-profil-primo')) {
+      await this.sendToPilot({ isInactive: true })
+      return true
+    }
     return Boolean(document.querySelector('#paiements-droits-collapse'))
   }
 
@@ -191,28 +196,37 @@ class CafContentScript extends ContentScript {
     if (this.store.userCredentials) {
       await this.saveCredentials(this.store.userCredentials)
     }
-    const userCnafId = await this.evaluateInWorker(() => {
-      return document.documentElement.innerHTML.match(
-        /var userid = "([0-9-]*)";/
-      )[1]
-    })
-    this.store.cnafUserId = userCnafId.split('-')[1]
-    const bills = await this.fetchPaiements()
-    const attestations = await this.fetchAttestations()
-    if (bills.length) {
-      await this.saveBills(bills, {
-        context,
-        fileIdAttributes: ['date', 'amount'],
-        contentType: 'application/pdf',
-        qualificationLabel: 'payment_proof_family_allowance'
+    if (!this.store.isInactive) {
+      const userCnafId = await this.evaluateInWorker(() => {
+        return document.documentElement.innerHTML.match(
+          /var userid = "([0-9-]*)";/
+        )[1]
       })
+      this.store.cnafUserId = userCnafId.split('-')[1]
+      const bills = await this.fetchPaiements()
+      if (bills.length) {
+        await this.saveBills(bills, {
+          context,
+          fileIdAttributes: ['date', 'amount'],
+          contentType: 'application/pdf',
+          qualificationLabel: 'payment_proof_family_allowance'
+        })
+      }
+      const attestations = await this.fetchAttestations()
+      if (attestations.length) {
+        await this.saveFiles(attestations, {
+          context,
+          fileIdAttributes: ['filename'],
+          contentType: 'application/pdf',
+          qualificationLabel: 'caf'
+        })
+      }
+    } else {
+      this.log(
+        'warn',
+        'Looks like it is an inactive account, fetching partial identity only ...'
+      )
     }
-    await this.saveFiles(attestations, {
-      context,
-      fileIdAttributes: ['filename'],
-      contentType: 'application/pdf',
-      qualificationLabel: 'caf'
-    })
     const identity = await this.fetchIdentity()
     await this.saveIdentity(identity)
   }
@@ -349,35 +363,56 @@ class CafContentScript extends ContentScript {
 
   async fetchIdentity() {
     this.log('info', '📍️ fetchIdentity starts')
-    await this.gotoAndCheckCaptcha(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte',
-      '#paiements-droits-collapse'
-    )
-    await this.gotoAndCheckCaptcha(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil',
-      'cnaf-cds-profilcomplet-allocataire'
-    )
+    if (!this.store.isInactive) {
+      await this.gotoAndCheckCaptcha(
+        'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte',
+        '#paiements-droits-collapse'
+      )
+      await this.gotoAndCheckCaptcha(
+        'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil',
+        'cnaf-cds-profilcomplet-allocataire'
+      )
+    }
     const identity = await this.computeIdentity()
     return identity
   }
 
   async computeIdentity() {
     this.log('info', '📍️ computeIdentity starts')
-    const fullProfil = this.store.fullIdentity.response
-    const partialProfil = this.store.partialIdentity.response
+    const fullProfil = this.store.fullIdentity?.response
+    const partialProfil = this.store.partialIdentity?.response
     const result = { contact: {} }
 
-    result.contact.maritalStatus = findMaritalStatus(
-      fullProfil.sitfam.libSitFam
-    )
-    result.contact.numberOfDependants = findNumberOfDependants(partialProfil)
-    result.contact.address = findAddressInfos(fullProfil.adresse)
-    result.contact.email = [fullProfil.utilisateur.coordonneesContact.mail]
-    result.contact.phone = findPhoneNumbers(
-      fullProfil.utilisateur.coordonneesContact
-    )
-    result.contact.gender = computeGender(fullProfil.utilisateur.civ)
-    result.cafFileNumber = this.store.cnafUserId
+    const maritalStatus = fullProfil.sitfam?.libSitFam
+    const numberOfDependants = partialProfil
+    const address = fullProfil.adresse
+    const email = fullProfil.utilisateur?.coordonneesContact?.mail
+    const userCoordinates = fullProfil.utilisateur?.coordonneesContact
+    const gender = fullProfil.utilisateur?.civ
+    const cafFileNumber = this.store.cnafUserId
+
+    if (maritalStatus) {
+      result.contact.maritalStatus = findMaritalStatus(maritalStatus)
+    }
+    if (numberOfDependants) {
+      result.contact.numberOfDependants =
+        findNumberOfDependants(numberOfDependants)
+    }
+    if (address) {
+      result.contact.address = findAddressInfos(address)
+    }
+    if (email) {
+      result.contact.email = [email]
+    }
+    if (userCoordinates) {
+      result.contact.phone = findPhoneNumbers(userCoordinates)
+    }
+    if (gender) {
+      result.contact.gender = computeGender(gender)
+    }
+    if (cafFileNumber) {
+      result.cafFileNumber = cafFileNumber
+    }
     return result
   }
 
