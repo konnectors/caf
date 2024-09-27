@@ -2,6 +2,8 @@ import {
   ContentScript,
   RequestInterceptor
 } from 'cozy-clisk/dist/contentscript'
+import ky from 'ky/umd'
+import { blobToBase64 } from 'cozy-clisk/dist/contentscript/utils'
 import Minilog from '@cozy/minilog'
 
 const log = Minilog('ContentScript')
@@ -34,6 +36,12 @@ const requestInterceptor = new RequestInterceptor([
     method: 'GET',
     url: '/api/profilcompletfront/v1/profilcalp',
     serialization: 'json'
+  },
+  {
+    identifier: 'datesNetSocial',
+    method: 'GET',
+    url: '/api/attestationsfront/v1/mon_compte/dates_net_social',
+    serialization: 'json'
   }
 ])
 requestInterceptor.init()
@@ -56,7 +64,7 @@ class CafContentScript extends ContentScript {
       const { identifier, response } = payload
       this.log('debug', `${identifier} request intercepted`)
       this.store[identifier] = { response }
-      if (identifier === 'paiements') {
+      if (identifier === 'paiements' || identifier === 'datesNetSocial') {
         this.store.token = payload.requestHeaders.Authorization
       }
     }
@@ -325,12 +333,6 @@ class CafContentScript extends ContentScript {
     this.log('info', '📍️ computeAttestations starts')
     const attestationPaiement = {
       shouldReplaceFile: () => true,
-      requestOptions: {
-        // The PDF required an authorization
-        headers: {
-          Authorization: this.store.token
-        }
-      },
       fileurl: `${downloadBaseUrl}/api/attestationsfront/v1/mon_compte/derniere_attestation/paiements`,
       filename: `caf_attestation_paiements.pdf`,
       fileAttributes: {
@@ -354,7 +356,32 @@ class CafContentScript extends ContentScript {
       fileurl: `${downloadBaseUrl}/api/attestationsfront/v1/mon_compte/derniere_attestation/qf`,
       filename: `caf_attestation_quotient_familial.pdf`
     }
-
+    const allAttestations = [
+      attestationPaiement,
+      attestationMontantNetSocial,
+      attestationQuotientFamilial
+    ]
+    const availableAttestations = []
+    for (const attestation of allAttestations) {
+      const dataUri = await this.runInWorker('getFileDataUri', {
+        token: this.store.token,
+        url: attestation.fileurl
+      })
+      if (!dataUri) {
+        this.log(
+          'warn',
+          `User have no ${attestation.filename} file to download.`
+        )
+        continue
+      } else {
+        const oneAttestation = {
+          ...attestation,
+          dataUri
+        }
+        delete oneAttestation.fileurl
+        availableAttestations.push(oneAttestation)
+      }
+    }
     // In the CCS version of this konnector, we used to need to migrate the cafFileNumber metadata
     // This is supposed to be done now, but while confirming with the other teams we keep this around
     // |Mes papiers|
@@ -364,12 +391,7 @@ class CafContentScript extends ContentScript {
     //   attestation.fileAttributes.metadata.cafFileNumber = cafFileNumber
     // }
     // =====
-
-    return [
-      attestationPaiement,
-      attestationMontantNetSocial,
-      attestationQuotientFamilial
-    ]
+    return availableAttestations
   }
 
   async fetchIdentity() {
@@ -434,11 +456,57 @@ class CafContentScript extends ContentScript {
     }
     return false
   }
+
+  async getFileDataUri({ token, url }) {
+    this.log('info', '📍️ getFileDataUri starts')
+    const response = await ky.get(url, {
+      headers: {
+        Authorization: token
+      }
+    })
+    const clonedResponse = await response.clone()
+    if (!clonedResponse.ok) {
+      if (clonedResponse.status === 409) {
+        const errorHeader = clonedResponse.headers.get('libelleerreurcaffr')
+        this.log(
+          'info',
+          `File fetching result in 409 error with following message : ${errorHeader}`
+        )
+        return null
+      } else if (clonedResponse.status === 403) {
+        this.log(
+          'info',
+          `File fetching result in 403, user is not authorized to access this ressource`
+        )
+        throw new Error(
+          'File fetching results in 403, check the code, token should be found in interceptions'
+        )
+      } else if (clonedResponse.status === 404) {
+        this.log('info', `File fetching result in 404, given url is not found`)
+        throw new Error(
+          'File fetching results in 404, check the downloads urls'
+        )
+      } else if (
+        clonedResponse.status === 500 ||
+        clonedResponse.status === 502 ||
+        clonedResponse.status === 503
+      ) {
+        throw new Error('VENDOR_DOWN')
+      } else {
+        throw new Error(
+          `File fetching leads to untreated ${clonedResponse.status} error`
+        )
+      }
+    }
+    const blob = await response.blob()
+    const dataUri = await blobToBase64(blob)
+    return dataUri
+  }
 }
 
 const connector = new CafContentScript({ requestInterceptor })
 connector
-  .init({ additionalExposedMethodsNames: ['checkCaptcha'] })
+  .init({ additionalExposedMethodsNames: ['checkCaptcha', 'getFileDataUri'] })
   .catch(err => {
     log.warn(err)
   })
