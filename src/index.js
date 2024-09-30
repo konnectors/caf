@@ -128,8 +128,15 @@ class CafContentScript extends ContentScript {
       baseUrl,
       '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
     )
+    await this.runInWorker(
+      'click',
+      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
+    )
+    await this.waitForElementInWorker('button', {
+      includesText: 'Se connecter'
+    })
     await this.clickAndWait(
-      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]',
+      '.conteneur-connexion-cnaf .btn-form-cnaf.btn-majeur-cnaf',
       '#inputMotDePasse'
     )
   }
