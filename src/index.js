@@ -2,6 +2,8 @@ import {
   ContentScript,
   RequestInterceptor
 } from 'cozy-clisk/dist/contentscript'
+import ky from 'ky/umd'
+import { blobToBase64 } from 'cozy-clisk/dist/contentscript/utils'
 import Minilog from '@cozy/minilog'
 
 const log = Minilog('ContentScript')
@@ -34,6 +36,12 @@ const requestInterceptor = new RequestInterceptor([
     method: 'GET',
     url: '/api/profilcompletfront/v1/profilcalp',
     serialization: 'json'
+  },
+  {
+    identifier: 'datesNetSocial',
+    method: 'GET',
+    url: '/api/attestationsfront/v1/mon_compte/dates_net_social',
+    serialization: 'json'
   }
 ])
 requestInterceptor.init()
@@ -56,7 +64,7 @@ class CafContentScript extends ContentScript {
       const { identifier, response } = payload
       this.log('debug', `${identifier} request intercepted`)
       this.store[identifier] = { response }
-      if (identifier === 'paiements') {
+      if (identifier === 'paiements' || identifier === 'datesNetSocial') {
         this.store.token = payload.requestHeaders.Authorization
       }
     }
@@ -120,8 +128,15 @@ class CafContentScript extends ContentScript {
       baseUrl,
       '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
     )
+    await this.runInWorker(
+      'click',
+      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]'
+    )
+    await this.waitForElementInWorker('button', {
+      includesText: 'Se connecter'
+    })
     await this.clickAndWait(
-      '.is-disconnected > a[href="/redirect/s/Redirect?page=monCompte"]',
+      '.conteneur-connexion-cnaf .btn-form-cnaf.btn-majeur-cnaf',
       '#inputMotDePasse'
     )
   }
@@ -142,6 +157,11 @@ class CafContentScript extends ContentScript {
   }
 
   async checkAuthenticated() {
+    // Some login may lead directly to the userInfos page for inactive accounts
+    if (document.querySelector('cnaf-cds-profilcomplet-profil-primo')) {
+      await this.sendToPilot({ isInactive: true })
+      return true
+    }
     return Boolean(document.querySelector('#paiements-droits-collapse'))
   }
 
@@ -191,28 +211,37 @@ class CafContentScript extends ContentScript {
     if (this.store.userCredentials) {
       await this.saveCredentials(this.store.userCredentials)
     }
-    const userCnafId = await this.evaluateInWorker(() => {
-      return document.documentElement.innerHTML.match(
-        /var userid = "([0-9-]*)";/
-      )[1]
-    })
-    this.store.cnafUserId = userCnafId.split('-')[1]
-    const bills = await this.fetchPaiements()
-    const attestations = await this.fetchAttestations()
-    if (bills.length) {
-      await this.saveBills(bills, {
-        context,
-        fileIdAttributes: ['date', 'amount'],
-        contentType: 'application/pdf',
-        qualificationLabel: 'payment_proof_family_allowance'
+    if (!this.store.isInactive) {
+      const userCnafId = await this.evaluateInWorker(() => {
+        return document.documentElement.innerHTML.match(
+          /var userid = "([0-9-]*)";/
+        )[1]
       })
+      this.store.cnafUserId = userCnafId.split('-')[1]
+      const bills = await this.fetchPaiements()
+      if (bills.length) {
+        await this.saveBills(bills, {
+          context,
+          fileIdAttributes: ['date', 'amount'],
+          contentType: 'application/pdf',
+          qualificationLabel: 'payment_proof_family_allowance'
+        })
+      }
+      const attestations = await this.fetchAttestations()
+      if (attestations.length) {
+        await this.saveFiles(attestations, {
+          context,
+          fileIdAttributes: ['filename'],
+          contentType: 'application/pdf',
+          qualificationLabel: 'caf'
+        })
+      }
+    } else {
+      this.log(
+        'warn',
+        'Looks like it is an inactive account, fetching partial identity only ...'
+      )
     }
-    await this.saveFiles(attestations, {
-      context,
-      fileIdAttributes: ['filename'],
-      contentType: 'application/pdf',
-      qualificationLabel: 'caf'
-    })
     const identity = await this.fetchIdentity()
     await this.saveIdentity(identity)
   }
@@ -221,8 +250,19 @@ class CafContentScript extends ContentScript {
     this.log('info', '📍️ fetchPaiements starts')
     await this.gotoAndCheckCaptcha(
       'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMesPaiements',
-      '#mes-attestations-collapse'
+      '#paiements-droits-complet-collapse'
     )
+    const hasNoPaiements = await this.evaluateInWorker(() => {
+      return document
+        .querySelector('#paiements-droits-complet-collapse > div')
+        .textContent.includes(
+          "Il n'y a pas de paiement effectué sur votre compte."
+        )
+    })
+    if (hasNoPaiements) {
+      this.log('warn', 'Accounts seems to have no payments')
+      return []
+    }
     const interceptedBills = this.store.paiements.response.paiements
     const bills = await this.computeBills(interceptedBills)
     return bills
@@ -300,12 +340,6 @@ class CafContentScript extends ContentScript {
     this.log('info', '📍️ computeAttestations starts')
     const attestationPaiement = {
       shouldReplaceFile: () => true,
-      requestOptions: {
-        // The PDF required an authorization
-        headers: {
-          Authorization: this.store.token
-        }
-      },
       fileurl: `${downloadBaseUrl}/api/attestationsfront/v1/mon_compte/derniere_attestation/paiements`,
       filename: `caf_attestation_paiements.pdf`,
       fileAttributes: {
@@ -329,7 +363,32 @@ class CafContentScript extends ContentScript {
       fileurl: `${downloadBaseUrl}/api/attestationsfront/v1/mon_compte/derniere_attestation/qf`,
       filename: `caf_attestation_quotient_familial.pdf`
     }
-
+    const allAttestations = [
+      attestationPaiement,
+      attestationMontantNetSocial,
+      attestationQuotientFamilial
+    ]
+    const availableAttestations = []
+    for (const attestation of allAttestations) {
+      const dataUri = await this.runInWorker('getFileDataUri', {
+        token: this.store.token,
+        url: attestation.fileurl
+      })
+      if (!dataUri) {
+        this.log(
+          'warn',
+          `User have no ${attestation.filename} file to download.`
+        )
+        continue
+      } else {
+        const oneAttestation = {
+          ...attestation,
+          dataUri
+        }
+        delete oneAttestation.fileurl
+        availableAttestations.push(oneAttestation)
+      }
+    }
     // In the CCS version of this konnector, we used to need to migrate the cafFileNumber metadata
     // This is supposed to be done now, but while confirming with the other teams we keep this around
     // |Mes papiers|
@@ -339,45 +398,61 @@ class CafContentScript extends ContentScript {
     //   attestation.fileAttributes.metadata.cafFileNumber = cafFileNumber
     // }
     // =====
-
-    return [
-      attestationPaiement,
-      attestationMontantNetSocial,
-      attestationQuotientFamilial
-    ]
+    return availableAttestations
   }
 
   async fetchIdentity() {
     this.log('info', '📍️ fetchIdentity starts')
-    await this.gotoAndCheckCaptcha(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte',
-      '#paiements-droits-collapse'
-    )
-    await this.gotoAndCheckCaptcha(
-      'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil',
-      'cnaf-cds-profilcomplet-allocataire'
-    )
+    if (!this.store.isInactive) {
+      await this.gotoAndCheckCaptcha(
+        'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompte',
+        '#paiements-droits-collapse'
+      )
+      await this.gotoAndCheckCaptcha(
+        'https://wwwd.caf.fr/redirect/s/Redirect?page=monCompteMonProfil',
+        'cnaf-cds-profilcomplet-allocataire'
+      )
+    }
     const identity = await this.computeIdentity()
     return identity
   }
 
   async computeIdentity() {
     this.log('info', '📍️ computeIdentity starts')
-    const fullProfil = this.store.fullIdentity.response
-    const partialProfil = this.store.partialIdentity.response
+    const fullProfil = this.store.fullIdentity?.response
+    const partialProfil = this.store.partialIdentity?.response
     const result = { contact: {} }
 
-    result.contact.maritalStatus = findMaritalStatus(
-      fullProfil.sitfam.libSitFam
-    )
-    result.contact.numberOfDependants = findNumberOfDependants(partialProfil)
-    result.contact.address = findAddressInfos(fullProfil.adresse)
-    result.contact.email = [fullProfil.utilisateur.coordonneesContact.mail]
-    result.contact.phone = findPhoneNumbers(
-      fullProfil.utilisateur.coordonneesContact
-    )
-    result.contact.gender = computeGender(fullProfil.utilisateur.civ)
-    result.cafFileNumber = this.store.cnafUserId
+    const maritalStatus = fullProfil.sitfam?.libSitFam
+    const numberOfDependants = partialProfil
+    const address = fullProfil.adresse
+    const email = fullProfil.utilisateur?.coordonneesContact?.mail
+    const userCoordinates = fullProfil.utilisateur?.coordonneesContact
+    const gender = fullProfil.utilisateur?.civ
+    const cafFileNumber = this.store.cnafUserId
+
+    if (maritalStatus) {
+      result.contact.maritalStatus = findMaritalStatus(maritalStatus)
+    }
+    if (numberOfDependants) {
+      result.contact.numberOfDependants =
+        findNumberOfDependants(numberOfDependants)
+    }
+    if (address) {
+      result.contact.address = findAddressInfos(address)
+    }
+    if (email) {
+      result.contact.email = [email]
+    }
+    if (userCoordinates) {
+      result.contact.phone = findPhoneNumbers(userCoordinates)
+    }
+    if (gender) {
+      result.contact.gender = computeGender(gender)
+    }
+    if (cafFileNumber) {
+      result.cafFileNumber = cafFileNumber
+    }
     return result
   }
 
@@ -388,11 +463,57 @@ class CafContentScript extends ContentScript {
     }
     return false
   }
+
+  async getFileDataUri({ token, url }) {
+    this.log('info', '📍️ getFileDataUri starts')
+    const response = await ky.get(url, {
+      headers: {
+        Authorization: token
+      }
+    })
+    const clonedResponse = await response.clone()
+    if (!clonedResponse.ok) {
+      if (clonedResponse.status === 409) {
+        const errorHeader = clonedResponse.headers.get('libelleerreurcaffr')
+        this.log(
+          'info',
+          `File fetching result in 409 error with following message : ${errorHeader}`
+        )
+        return null
+      } else if (clonedResponse.status === 403) {
+        this.log(
+          'info',
+          `File fetching result in 403, user is not authorized to access this ressource`
+        )
+        throw new Error(
+          'File fetching results in 403, check the code, token should be found in interceptions'
+        )
+      } else if (clonedResponse.status === 404) {
+        this.log('info', `File fetching result in 404, given url is not found`)
+        throw new Error(
+          'File fetching results in 404, check the downloads urls'
+        )
+      } else if (
+        clonedResponse.status === 500 ||
+        clonedResponse.status === 502 ||
+        clonedResponse.status === 503
+      ) {
+        throw new Error('VENDOR_DOWN')
+      } else {
+        throw new Error(
+          `File fetching leads to untreated ${clonedResponse.status} error`
+        )
+      }
+    }
+    const blob = await response.blob()
+    const dataUri = await blobToBase64(blob)
+    return dataUri
+  }
 }
 
 const connector = new CafContentScript({ requestInterceptor })
 connector
-  .init({ additionalExposedMethodsNames: ['checkCaptcha'] })
+  .init({ additionalExposedMethodsNames: ['checkCaptcha', 'getFileDataUri'] })
   .catch(err => {
     log.warn(err)
   })
