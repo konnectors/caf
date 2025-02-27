@@ -25834,6 +25834,12 @@ class CafContentScript extends cozy_clisk_dist_contentscript__WEBPACK_IMPORTED_M
     const passwordField = document.querySelector('#inputMotDePasse')
     if (loginField && passwordField) {
       this.log('info', 'Found credentials fields, adding form listener')
+      // Hidding remember-me checkbox to avoid obfusquated login values
+      // It was causing issues with the autofill, leading to save and apply login formed like "123456789XXX" after first login
+      document.querySelector(
+        'label[for="souvenir"]'
+      ).parentElement.style.opacity = '0'
+      this.log('info', 'Removed rememberMe checkbox')
       const loginForm = document.querySelector('form')
       loginForm.addEventListener('submit', () => {
         const login = loginField.value
@@ -25919,6 +25925,10 @@ class CafContentScript extends cozy_clisk_dist_contentscript__WEBPACK_IMPORTED_M
     if (document.querySelector('cnaf-cds-profilcomplet-profil-primo')) {
       await this.sendToPilot({ isInactive: true })
       return true
+    }
+    if (document.querySelector('app-mfa')) {
+      this.log('info', 'Waiting for user to complete 2FA ...')
+      return false
     }
     return Boolean(document.querySelector('#paiements-droits-collapse'))
   }
@@ -26271,7 +26281,9 @@ class CafContentScript extends cozy_clisk_dist_contentscript__WEBPACK_IMPORTED_M
 
 const connector = new CafContentScript({ requestInterceptor })
 connector
-  .init({ additionalExposedMethodsNames: ['checkCaptcha', 'getFileDataUri'] })
+  .init({
+    additionalExposedMethodsNames: ['checkCaptcha', 'getFileDataUri']
+  })
   .catch(err => {
     log.warn(err)
   })
