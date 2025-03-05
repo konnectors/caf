@@ -10,7 +10,7 @@
     "@cozy/minilog": "1.0.0",
     "cozy-clisk": "^0.38.2",
     "date-fns": "4.1.0",
-    "ky": "^0.25.1"
+    "ky": "0.25.1"
   },
   "eslintConfig": {
     "extends": [
